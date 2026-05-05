@@ -39,5 +39,6 @@ build/
 *.zip
 *.log
 *.pid
-nginx-1.18.0 dianping/logs/
-nginx-1.18.0 dianping/nginx.exe
+front/logs/
+front/temp/
+front/nginx.exe

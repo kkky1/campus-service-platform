@@ -46,6 +46,19 @@ services:
       timeout: 3s
       retries: 20
 
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: hmdp-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+      - ./front/html/hmdp:/usr/share/nginx/html:ro
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+
 volumes:
   hmdp-mysql-data:
   hmdp-redis-data:
