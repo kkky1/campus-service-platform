@@ -99,3 +99,20 @@ func TestRAGEnvOverride(t *testing.T) {
 		t.Fatalf("RAG 环境变量覆盖失败: %+v", cfg.RAG)
 	}
 }
+
+func TestLoginSkipCodeEnv(t *testing.T) {
+	os.Setenv("LOGIN_SKIP_CODE", "true")
+	defer os.Unsetenv("LOGIN_SKIP_CODE")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Login.SkipCode {
+		t.Fatal("LOGIN_SKIP_CODE=true 未生效")
+	}
+	os.Setenv("LOGIN_SKIP_CODE", "false")
+	cfg, _ = Load("")
+	if cfg.Login.SkipCode {
+		t.Fatal("LOGIN_SKIP_CODE=false 未生效")
+	}
+}

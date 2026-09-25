@@ -28,6 +28,8 @@ type App struct {
 	Pub       OrderPublisher
 	Log       *slog.Logger
 	UploadDir string
+	// LoginSkipCode 为 true 时登录不校验短信验证码（临时开关，见 config.login.skip_code）
+	LoginSkipCode bool
 }
 
 // ProcessSeckillOrder 实现 mq.OrderProcessor：幂等建单 + 条件扣库存。

@@ -66,13 +66,15 @@ func (a *App) Login(ctx context.Context, phone, code string) dto.Result {
 	if !phoneRegex.MatchString(phone) {
 		return dto.Fail("手机号格式错误")
 	}
-	cached, err := a.RDB.Get(ctx, rds.LoginCodeKey+phone).Result()
-	if err != nil || cached != code {
-		return dto.Fail("验证码不一致，请重新输入")
+	if !a.LoginSkipCode {
+		cached, err := a.RDB.Get(ctx, rds.LoginCodeKey+phone).Result()
+		if err != nil || cached != code {
+			return dto.Fail("验证码不一致，请重新输入")
+		}
 	}
 	// 查用户，不存在则注册
 	var user repo.User
-	err = a.DB.WithContext(ctx).Where("phone = ?", phone).First(&user).Error
+	err := a.DB.WithContext(ctx).Where("phone = ?", phone).First(&user).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		user = repo.User{
 			Phone:    &phone,

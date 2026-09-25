@@ -64,6 +64,10 @@ func main() {
 	// Kafka
 	producer := mq.NewProducer(cfg.Kafka.Brokers, log)
 	app := service.New(db, rdb, producer, log, cfg.Upload.Dir)
+	app.LoginSkipCode = cfg.Login.SkipCode
+	if cfg.Login.SkipCode {
+		log.Warn("登录验证码校验已关闭（config.login.skip_code=true），生产环境请恢复")
+	}
 
 	// 消费者（主 + DLT）
 	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

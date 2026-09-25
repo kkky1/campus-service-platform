@@ -26,7 +26,11 @@ type Config struct {
 	Upload struct {
 		Dir string `yaml:"dir"`
 	} `yaml:"upload"`
-	RAG RAGConfig `yaml:"rag"`
+	RAG   RAGConfig `yaml:"rag"`
+	Login struct {
+		// SkipCode 临时开关：登录不校验短信验证码（默认 false，生产请保持开启校验）
+		SkipCode bool `yaml:"skip_code"`
+	} `yaml:"login"`
 }
 
 // RAGConfig RAG 模块配置。
@@ -148,6 +152,9 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("RAG_LLM_MODEL"); v != "" {
 		cfg.RAG.LLM.Model = v
+	}
+	if v := os.Getenv("LOGIN_SKIP_CODE"); v != "" {
+		cfg.Login.SkipCode = v == "true" || v == "1"
 	}
 }
 

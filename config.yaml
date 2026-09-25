@@ -24,3 +24,7 @@ rag:
     top_k: 8
     vector_weight: 0.7
     keyword_weight: 0.3
+login:
+  # 临时：登录不校验短信验证码（前端可留空验证码）。生产环境请设为 false。
+  # 也可用环境变量 LOGIN_SKIP_CODE=true/false 覆盖
+  skip_code: true
