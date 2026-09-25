@@ -1,0 +1,12 @@
+# 服务器部署用瘦镜像：宿主机先编译好二进制（bin/campus-server），镜像只负责运行
+# 说明：GitHub Actions / 联网良好环境可直接用多阶段 Dockerfile 从源码构建；
+#       本机（国内 VPS）容器内下载 Go 依赖过慢，故采用"宿主机构建 + 瘦镜像"。
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app
+USER app
+WORKDIR /app
+COPY bin/campus-server /app/campus-server
+COPY config.yaml /app/config.yaml
+ENV SERVER_PORT=8081 UPLOAD_DIR=/data/uploads
+EXPOSE 8081
+ENTRYPOINT ["/app/campus-server"]

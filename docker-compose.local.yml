@@ -13,6 +13,8 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
+      # hmdp.sql 含 0000-00-00 零日期（原教学库），需放宽 sql_mode
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p123456"]
       interval: 5s
@@ -58,7 +60,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prebuilt
     container_name: hmdp-backend
     ports:
       - "8081:8081"

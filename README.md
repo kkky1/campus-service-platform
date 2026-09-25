@@ -102,14 +102,27 @@ go build -o bin/campus-server ./cmd/server
 ## Docker Compose 一键起全套
 
 ```bash
+# 服务器部署：先在宿主机编译二进制（容器内下载 Go 依赖过慢），再起容器
+go build -o bin/campus-server ./cmd/server
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-- MySQL：初始化脚本 `db/hmdp.sql`（需首次导入：`docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp < db/hmdp.sql`）
+- MySQL：初始化脚本 `db/hmdp.sql`（含零日期，需放宽 sql_mode，compose 已配置；导入命令：
+  `(echo "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';"; cat db/hmdp.sql) | docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp`）
 - Redis：`:6379`
 - Kafka：`:9092`（KRaft 单节点，主题自动创建）
-- 后端：`:8081`
-- 前端 + Nginx：`http://localhost:8080`（`/api` 反向代理到后端）
+- 后端：`:8081`（镜像用 `Dockerfile.prebuilt` 瘦镜像；`Dockerfile` 多阶段构建适合网络良好的 CI 环境）
+- 前端 + Nginx：`:8080`（前端镜像由 `Dockerfile.front` 打包：静态资源 + nginx 配置一体；`/api` 反向代理到后端）
+
+### 部署与访问
+
+- **拉取式 CD**：服务器 systemd `campus-deploy.timer` 每 2 分钟执行 `scripts/deploy-poll.sh`——
+  只允许 fast-forward，本地有未推送提交或未提交改动时自动跳过；有新提交则编译 → compose 重建 → 健康检查。
+- **访问前端**：
+  - 公网：在 VPS 服务商的 NAT 端口映射面板中，把某个公网端口映射到本机 `8080`（当前公网 80/8000 不是本机服务）。
+  - 临时访问（无需映射）：`ssh -p 64540 -L 8080:127.0.0.1:8080 root@<服务器IP>`，然后打开 `http://localhost:8080`。
+- **前端打包 CI**：`.github/workflows/frontend.yml` 在 front/ 变更时执行：静态资源校验 → `tar.gz + sha256`
+  产物上传（Actions Artifacts）→ 构建 `Dockerfile.front` 镜像验证；部署由拉取式 CD 自动完成。
 
 ## 测试
 
