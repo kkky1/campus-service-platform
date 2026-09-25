@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,29 +24,46 @@ type redisData struct {
 
 const rebuildWorkers = 10
 
-// QueryShopById 店铺详情：仅依赖逻辑过期缓存，未预热返回失败。
+// QueryShopById 店铺详情：逻辑过期缓存 → 未命中回源 DB → DB 无则空值缓存防穿透。
 func (a *App) QueryShopById(ctx context.Context, id int64) dto.Result {
 	key := fmt.Sprintf("%s%d", rds.CacheShopKey, id)
 	raw, err := a.RDB.Get(ctx, key).Result()
-	if err != nil || strings.TrimSpace(raw) == "" {
-		// 键不存在/为空：与原 queryWithLogicalExpire 一致，返回失败（缓存需预热）
+	if err == nil && strings.TrimSpace(raw) != "" {
+		var rd redisData
+		if e := json.Unmarshal([]byte(raw), &rd); e != nil {
+			// 脏缓存：删除后回源
+			a.RDB.Del(ctx, key)
+		} else {
+			var shop repo.Shop
+			if e := json.Unmarshal(rd.Data, &shop); e != nil {
+				a.RDB.Del(ctx, key)
+			} else {
+				expire, e := parseExpireTime(rd.ExpireTime)
+				if e == nil && expire.After(time.Now()) {
+					return dto.OkData(shop)
+				}
+				// 已逻辑过期：返回旧数据，异步重建（互斥锁 lock:shop:{id} EX 10s）
+				a.rebuildShopCacheAsync(context.Background(), key, id)
+				return dto.OkData(shop)
+			}
+		}
+	} else if err == nil && raw == "" {
+		// 空值缓存（防穿透）
 		return dto.Fail("店铺不存在！")
 	}
-	var rd redisData
-	if err := json.Unmarshal([]byte(raw), &rd); err != nil {
-		return dto.Fail("服务器异常")
-	}
+
+	// 缓存未命中：回源数据库
 	var shop repo.Shop
-	if err := json.Unmarshal(rd.Data, &shop); err != nil {
+	dbErr := a.DB.WithContext(ctx).First(&shop, id).Error
+	if errors.Is(dbErr, gorm.ErrRecordNotFound) {
+		a.RDB.Set(ctx, key, "", rds.CacheNullTTL)
+		return dto.Fail("店铺不存在！")
+	}
+	if dbErr != nil {
+		a.Log.Error("店铺回源查询失败", "id", id, "err", dbErr)
 		return dto.Fail("服务器异常")
 	}
-	expire, err := parseExpireTime(rd.ExpireTime)
-	if err != nil || expire.After(time.Now()) {
-		// 未过期：直接返回
-		return dto.OkData(shop)
-	}
-	// 已逻辑过期：返回旧数据，异步重建（互斥锁 lock:shop:{id} EX 10s）
-	a.rebuildShopCacheAsync(context.Background(), key, id)
+	a.setShopWithLogicalExpire(ctx, key, &shop) // 回源后写缓存
 	return dto.OkData(shop)
 }
 
@@ -94,13 +112,15 @@ func mustJSON(v any) string {
 	return string(b)
 }
 
-// SaveShop 新增店铺，返回 id。
+// SaveShop 新增店铺，返回 id（顺带写详情缓存与 GEO 索引）。
 func (a *App) SaveShop(ctx context.Context, s *repo.Shop) dto.Result {
 	cols := shopColumns(s)
 	if err := a.DB.WithContext(ctx).Select(cols).Create(s).Error; err != nil {
 		a.Log.Error("新增店铺失败", "err", err)
 		return dto.Fail("服务器异常")
 	}
+	a.setShopWithLogicalExpire(ctx, fmt.Sprintf("%s%d", rds.CacheShopKey, *s.Id), s)
+	a.geoAddShop(ctx, s)
 	return dto.OkData(*s.Id)
 }
 
@@ -146,17 +166,36 @@ func shopColumns(s *repo.Shop) []string {
 	return cols
 }
 
-// UpdateShop 更新店铺并删除缓存。
+// UpdateShop 更新店铺：删缓存 + 同步 GEO 索引（类型变更时清理旧集合）。
 func (a *App) UpdateShop(ctx context.Context, s *repo.Shop) dto.Result {
 	if s.Id == nil {
 		return dto.Fail("店铺id不能为空")
 	}
+	// 记录旧值用于 GEO 旧集合清理
+	var old repo.Shop
+	_ = a.DB.WithContext(ctx).First(&old, *s.Id).Error
 	cols := shopColumns(s)
 	if err := a.DB.WithContext(ctx).Model(&repo.Shop{}).Where("id = ?", *s.Id).Select(cols).Updates(s).Error; err != nil {
 		a.Log.Error("更新店铺失败", "err", err)
 		return dto.Fail("服务器异常")
 	}
 	a.RDB.Del(ctx, fmt.Sprintf("%s%d", rds.CacheShopKey, *s.Id))
+	if old.TypeId != nil && s.TypeId != nil && *old.TypeId != *s.TypeId {
+		a.RDB.ZRem(ctx, fmt.Sprintf("%s%d", rds.ShopGeoKey, *old.TypeId), fmt.Sprint(*s.Id))
+	}
+	// 同步 GEO：以最终状态为准（更新未提供的字段沿用旧值）
+	final := old
+	final.Id = s.Id
+	if s.TypeId != nil {
+		final.TypeId = s.TypeId
+	}
+	if s.X != nil {
+		final.X = s.X
+	}
+	if s.Y != nil {
+		final.Y = s.Y
+	}
+	a.geoAddShop(ctx, &final)
 	return dto.Ok()
 }
 
@@ -175,6 +214,7 @@ func (a *App) QueryShopByType(ctx context.Context, typeId int64, current int, x,
 		return dto.OkData(shops)
 	}
 	key := fmt.Sprintf("%s%d", rds.ShopGeoKey, typeId)
+	a.backfillShopGeo(ctx, typeId) // GEO 索引缺失时懒回填
 	from := (current - 1) * rds.DefaultPageSize
 	end := current * rds.DefaultPageSize
 	// GEORADIUS：与 Java 版 GEOSEARCH 语义一致（距离升序 + 5000m），兼容 Redis 6.0 与 7.x
@@ -217,6 +257,35 @@ func (a *App) QueryShopByType(ctx context.Context, typeId int64, current int, x,
 		shops = []repo.Shop{}
 	}
 	return dto.OkData(shops)
+}
+
+// geoAddShop 维护店铺 GEO 索引（缺坐标/类型时跳过）。
+func (a *App) geoAddShop(ctx context.Context, s *repo.Shop) {
+	if s.Id == nil || s.TypeId == nil || s.X == nil || s.Y == nil {
+		return
+	}
+	if err := a.RDB.GeoAdd(ctx, fmt.Sprintf("%s%d", rds.ShopGeoKey, *s.TypeId), &redis.GeoLocation{
+		Longitude: *s.X, Latitude: *s.Y, Name: fmt.Sprint(*s.Id),
+	}).Err(); err != nil {
+		a.Log.Warn("GEO 索引写入失败", "shopId", *s.Id, "err", err)
+	}
+}
+
+// backfillShopGeo GEO 集合为空时从 DB 回填该类型带坐标的店铺。
+func (a *App) backfillShopGeo(ctx context.Context, typeId int64) {
+	key := fmt.Sprintf("%s%d", rds.ShopGeoKey, typeId)
+	if n, err := a.RDB.ZCard(ctx, key).Result(); err == nil && n > 0 {
+		return
+	}
+	var shops []repo.Shop
+	if err := a.DB.WithContext(ctx).
+		Where("type_id = ? AND x IS NOT NULL AND y IS NOT NULL", typeId).
+		Find(&shops).Error; err != nil {
+		return
+	}
+	for i := range shops {
+		a.geoAddShop(ctx, &shops[i])
+	}
 }
 
 func joinInt64(ids []int64) string {

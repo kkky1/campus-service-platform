@@ -25,6 +25,7 @@ const (
 	LoginCodeTTL = 2 * time.Minute
 	LoginUserTTL = 30 * time.Minute // 原常量声明 36000L，但代码实际使用 30 分钟，统一为实际行为
 	CacheShopTTL = 30 * time.Minute // 逻辑过期
+	CacheNullTTL = 2 * time.Minute  // 空值缓存防穿透
 	LockShopTTL  = 10 * time.Second
 )
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,3 +129,66 @@ func TestShopTypeList(t *testing.T) {
 
 func int64Ptr(v int64) *int64 { return &v }
 func intPtr(v int) *int       { return &v }
+
+// B1 修复回归：缓存未命中回源 DB 并写缓存
+func TestQueryShopByIdFallsBackToDB(t *testing.T) {
+	app, _ := newAppEnv(t)
+	ctx := context.Background()
+	app.DB.Create(&repo.Shop{Id: int64Ptr(1), Name: strPtr("回源店")})
+	res := app.QueryShopById(ctx, 1)
+	if !res.Success {
+		t.Fatalf("缓存未命中应回源成功: %v", res)
+	}
+	data, _ := json.Marshal(res.Data)
+	if string(data) != `{"id":1,"name":"回源店"}` {
+		t.Fatalf("回源数据不对: %s", data)
+	}
+	// 缓存已写入（逻辑过期结构）
+	raw, err := app.RDB.Get(ctx, rds.CacheShopKey+"1").Result()
+	if err != nil || !strings.Contains(raw, "expireTime") {
+		t.Fatalf("回源后应写缓存: %q %v", raw, err)
+	}
+}
+
+// B1 修复回归：DB 不存在写空值缓存（防穿透）
+func TestQueryShopByIdNullCache(t *testing.T) {
+	app, _ := newAppEnv(t)
+	ctx := context.Background()
+	res := app.QueryShopById(ctx, 999)
+	if res.ErrorMsg == nil || *res.ErrorMsg != "店铺不存在！" {
+		t.Fatalf("不存在店铺文案: %v", res)
+	}
+	val, err := app.RDB.Get(ctx, rds.CacheShopKey+"999").Result()
+	if err != nil || val != "" {
+		t.Fatalf("应写空值缓存: %q %v", val, err)
+	}
+	ttl := app.RDB.TTL(ctx, rds.CacheShopKey+"999").Val()
+	if ttl <= 0 {
+		t.Fatalf("空值缓存应有 TTL: %v", ttl)
+	}
+}
+
+// B2 修复回归：新增/更新维护 GEO 索引，类型变更清理旧集合
+func TestShopGeoIndexMaintenance(t *testing.T) {
+	app, _ := newAppEnv(t)
+	ctx := context.Background()
+	x, y := 120.1, 30.2
+	res := app.SaveShop(ctx, &repo.Shop{Name: strPtr("GEO店"), TypeId: int64Ptr(1), X: &x, Y: &y})
+	if !res.Success {
+		t.Fatalf("新增失败: %v", res)
+	}
+	id := res.Data.(int64)
+	if n, _ := app.RDB.ZCard(ctx, rds.ShopGeoKey+"1").Result(); n != 1 {
+		t.Fatalf("类型1 GEO 应有 1 个成员: %d", n)
+	}
+	// 换类型
+	if r := app.UpdateShop(ctx, &repo.Shop{Id: &id, TypeId: int64Ptr(2)}); !r.Success {
+		t.Fatalf("更新失败: %v", r)
+	}
+	if n, _ := app.RDB.ZCard(ctx, rds.ShopGeoKey+"1").Result(); n != 0 {
+		t.Fatalf("旧类型 GEO 应清空: %d", n)
+	}
+	if n, _ := app.RDB.ZCard(ctx, rds.ShopGeoKey+"2").Result(); n != 1 {
+		t.Fatalf("新类型 GEO 应有成员: %d", n)
+	}
+}
