@@ -1,4 +1,9 @@
-name: CD - Deploy campus-service-platform
+name: CI - campus-service-platform
+
+# 说明：部署采用拉取式（pull-based CD）——
+# 服务器上的 systemd timer（campus-deploy.timer）每 2 分钟从 GitHub 拉取，
+# 有新提交则自动 docker compose 构建部署并健康检查（脚本 /root/campus-deploy.sh）。
+# 本工作流负责推送前的质量门禁。
 
 on:
   push:
@@ -25,54 +30,3 @@ jobs:
 
       - name: go test
         run: go test ./...
-
-  deploy:
-    name: 部署到云服务器
-    needs: build-test
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: "配置 SSH 私钥（Secrets: campus）"
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.campus }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p ${{ secrets.SERVER_PORT }} -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
-
-      - name: rsync 同步代码到服务器
-        run: |
-          rsync -avz --delete \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'bin' \
-            --exclude 'data' \
-            -e "ssh -p ${{ secrets.SERVER_PORT }} -o StrictHostKeyChecking=accept-new" \
-            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/"
-
-      - name: 首次导入数据库（tb_user 表不存在时）
-        run: |
-          if ! ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-              "docker exec hmdp-mysql mysql -uroot -p123456 hmdp -N -e 'SHOW TABLES LIKE \"tb_user\"' | grep -q tb_user"; then
-            ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-              "docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp" < db/hmdp.sql
-          fi
-
-      - name: docker compose 构建并启动
-        run: |
-          ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "cd ${{ secrets.DEPLOY_PATH }} && \
-             docker compose -f docker-compose.local.yml up -d --build --remove-orphans && \
-             docker image prune -f"
-
-      - name: 健康检查（后端 /shop-type/list）
-        run: |
-          ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "for i in \$(seq 1 30); do \
-               curl -sf http://127.0.0.1:8081/shop-type/list > /dev/null && exit 0; \
-               sleep 2; \
-             done; \
-             echo '后端健康检查超时'; \
-             cd ${{ secrets.DEPLOY_PATH }} && docker compose -f docker-compose.local.yml logs backend --tail 50; \
-             exit 1"
