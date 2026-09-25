@@ -56,10 +56,10 @@ func TestQueryShopByIdNotWarmed(t *testing.T) {
 func TestQueryShopByIdLogicalExpireRebuild(t *testing.T) {
 	app, _ := newAppEnv(t)
 	ctx := context.Background()
-	// DB 里有新数据（模拟重建后取到的最新值）
 	shop := repo.Shop{Id: int64Ptr(1), Name: strPtr("旧名")}
 	app.DB.Create(&shop)
 	app.seedShopCache(t, 1, &shop, -time.Minute) // 已逻辑过期
+	// 1) 过期缓存立即返回旧数据（不等重建）
 	res := app.QueryShopById(ctx, 1)
 	if !res.Success {
 		t.Fatalf("过期应返回旧数据: %v", res)
@@ -68,13 +68,29 @@ func TestQueryShopByIdLogicalExpireRebuild(t *testing.T) {
 	if string(data) != `{"id":1,"name":"旧名"}` {
 		t.Fatalf("过期返回的不是旧数据: %s", data)
 	}
-	// 等待异步重建完成：DB 更新为新名 → 缓存应被重写
-	app.DB.Model(&repo.Shop{}).Where("id = 1").Update("name", "新名")
-	time.Sleep(300 * time.Millisecond)
+	// 2) 等待异步重建完成：缓存被重写且处于未过期状态（确定性轮询）
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		raw, err := app.RDB.Get(ctx, rds.CacheShopKey+"1").Result()
+		var rd redisData
+		if err == nil && json.Unmarshal([]byte(raw), &rd) == nil {
+			if exp, e := parseExpireTime(rd.ExpireTime); e == nil && exp.After(time.Now()) {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("异步重建未在期限内完成")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// 3) 更新店铺（内部删除缓存）→ 再次查询回源得到新值
+	if r := app.UpdateShop(ctx, &repo.Shop{Id: int64Ptr(1), Name: strPtr("新名")}); !r.Success {
+		t.Fatalf("更新失败: %v", r)
+	}
 	res = app.QueryShopById(ctx, 1)
 	data, _ = json.Marshal(res.Data)
 	if string(data) != `{"id":1,"name":"新名"}` {
-		t.Fatalf("重建后缓存未更新: %s", data)
+		t.Fatalf("更新后查询应回源得到新值: %s", data)
 	}
 }
 
