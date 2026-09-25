@@ -104,3 +104,33 @@ func TestTaskAndEval(t *testing.T) {
 		t.Fatalf("ListEvalCases: %v", cases)
 	}
 }
+
+// B5 修复回归：删除知识库级联清理评估与问答记录
+func TestDeleteKBCascadeFull(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	kb := &KnowledgeBase{Name: strP("级联测试")}
+	if err := s.CreateKB(ctx, kb); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateChatLog(ctx, &ChatLog{KbId: kb.Id, Question: strP("q"), Answer: strP("a")}); err != nil {
+		t.Fatal(err)
+	}
+	run := &EvalRun{KbId: kb.Id, Name: strP("r"), Status: strP("done")}
+	if err := s.CreateEvalRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertEvalCases(ctx, []EvalCase{{RunId: run.Id, Question: strP("q")}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteKB(ctx, *kb.Id); err != nil {
+		t.Fatal(err)
+	}
+	var chatCnt, runCnt, caseCnt int64
+	s.DB().Model(&ChatLog{}).Where("kb_id = ?", *kb.Id).Count(&chatCnt)
+	s.DB().Model(&EvalRun{}).Where("kb_id = ?", *kb.Id).Count(&runCnt)
+	s.DB().Model(&EvalCase{}).Where("run_id = ?", *run.Id).Count(&caseCnt)
+	if chatCnt != 0 || runCnt != 0 || caseCnt != 0 {
+		t.Fatalf("级联未清理: chat=%d run=%d case=%d", chatCnt, runCnt, caseCnt)
+	}
+}

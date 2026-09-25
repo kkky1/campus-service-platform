@@ -53,6 +53,22 @@ func (s *Store) DeleteKB(ctx context.Context, id int64) error {
 		if err := tx.Where("kb_id = ?", id).Delete(&Task{}).Error; err != nil {
 			return err
 		}
+		// 级联清理评估与问答记录（QA B5）
+		var runIds []int64
+		if err := tx.Model(&EvalRun{}).Where("kb_id = ?", id).Pluck("id", &runIds).Error; err != nil {
+			return err
+		}
+		if len(runIds) > 0 {
+			if err := tx.Where("run_id IN ?", runIds).Delete(&EvalCase{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("kb_id = ?", id).Delete(&EvalRun{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("kb_id = ?", id).Delete(&ChatLog{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&KnowledgeBase{}, id).Error
 	})
 }
