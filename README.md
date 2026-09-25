@@ -21,7 +21,7 @@
 
 ## 本地构建与运行
 
-前置：Go 1.25+。
+前置：Go 1.26+。
 
 ```bash
 go build -o bin/campus-server ./cmd/server
