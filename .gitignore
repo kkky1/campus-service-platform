@@ -46,3 +46,6 @@ front/nginx.exe
 ### Go ###
 bin/
 data/
+
+### 环境变量（RAG 密钥等）
+.env

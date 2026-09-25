@@ -67,6 +67,9 @@ services:
       REDIS_ADDR: redis:6379
       KAFKA_BROKERS: kafka:9092
       UPLOAD_DIR: /data/uploads
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - hmdp-upload-data:/data/uploads
       - ./db:/initdb:ro
