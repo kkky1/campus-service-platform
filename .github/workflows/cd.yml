@@ -1,0 +1,78 @@
+name: CD - Deploy campus-service-platform
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: 构建与测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+  deploy:
+    name: 部署到云服务器
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "配置 SSH 私钥（Secrets: campus）"
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.campus }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: rsync 同步代码到服务器
+        run: |
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'bin' \
+            --exclude 'data' \
+            -e "ssh -o StrictHostKeyChecking=accept-new" \
+            ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+      - name: 首次导入数据库（tb_user 表不存在时）
+        run: |
+          if ! ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+              "docker exec hmdp-mysql mysql -uroot -p123456 hmdp -N -e 'SHOW TABLES LIKE \"tb_user\"' | grep -q tb_user"; then
+            ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+              "docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp" < db/hmdp.sql
+          fi
+
+      - name: docker compose 构建并启动
+        run: |
+          ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "cd ${{ secrets.DEPLOY_PATH }} && \
+             docker compose -f docker-compose.local.yml up -d --build --remove-orphans && \
+             docker image prune -f"
+
+      - name: 健康检查（后端 /shop-type/list）
+        run: |
+          ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "for i in \$(seq 1 30); do \
+               curl -sf http://127.0.0.1:8081/shop-type/list > /dev/null && exit 0; \
+               sleep 2; \
+             done; \
+             echo '后端健康检查超时'; \
+             cd ${{ secrets.DEPLOY_PATH }} && docker compose -f docker-compose.local.yml logs backend --tail 50; \
+             exit 1"
