@@ -39,7 +39,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.campus }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -p ${{ secrets.SERVER_PORT }} -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: rsync 同步代码到服务器
         run: |
@@ -48,27 +48,27 @@ jobs:
             --exclude '.github' \
             --exclude 'bin' \
             --exclude 'data' \
-            -e "ssh -o StrictHostKeyChecking=accept-new" \
+            -e "ssh -p ${{ secrets.SERVER_PORT }} -o StrictHostKeyChecking=accept-new" \
             ./ "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.DEPLOY_PATH }}/"
 
       - name: 首次导入数据库（tb_user 表不存在时）
         run: |
-          if ! ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+          if ! ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
               "docker exec hmdp-mysql mysql -uroot -p123456 hmdp -N -e 'SHOW TABLES LIKE \"tb_user\"' | grep -q tb_user"; then
-            ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
               "docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp" < db/hmdp.sql
           fi
 
       - name: docker compose 构建并启动
         run: |
-          ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+          ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
             "cd ${{ secrets.DEPLOY_PATH }} && \
              docker compose -f docker-compose.local.yml up -d --build --remove-orphans && \
              docker image prune -f"
 
       - name: 健康检查（后端 /shop-type/list）
         run: |
-          ssh "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+          ssh -p ${{ secrets.SERVER_PORT }} "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
             "for i in \$(seq 1 30); do \
                curl -sf http://127.0.0.1:8081/shop-type/list > /dev/null && exit 0; \
                sleep 2; \
