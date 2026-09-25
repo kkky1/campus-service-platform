@@ -34,7 +34,7 @@ type AskResult struct {
 	Answer     string      `json:"answer"`
 	References []Reference `json:"references,omitempty"`
 	Cited      []int       `json:"cited,omitempty"`
-	LatencyMs  int64       `json:"latencyMs,omitempty"`
+	LatencyMs  int64       `json:"latencyMs"`
 	Model      string      `json:"model,omitempty"`
 }
 

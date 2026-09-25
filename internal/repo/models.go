@@ -6,13 +6,13 @@ import "campus-service-platform/internal/pkg/dto"
 
 // User tb_user
 type User struct {
-	Id         *int64        `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
-	Phone      *string       `gorm:"column:phone" json:"phone,omitempty"`
-	Password   *string       `gorm:"column:password" json:"password,omitempty"`
-	NickName   *string       `gorm:"column:nick_name" json:"nickName,omitempty"`
-	Icon       *string       `gorm:"column:icon" json:"icon,omitempty"`
-	CreateTime *dto.TimeT    `gorm:"column:create_time" json:"createTime,omitempty"`
-	UpdateTime *dto.TimeT    `gorm:"column:update_time" json:"updateTime,omitempty"`
+	Id         *int64     `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
+	Phone      *string    `gorm:"column:phone" json:"phone,omitempty"`
+	Password   *string    `gorm:"column:password" json:"password,omitempty"`
+	NickName   *string    `gorm:"column:nick_name" json:"nickName,omitempty"`
+	Icon       *string    `gorm:"column:icon" json:"icon,omitempty"`
+	CreateTime *dto.TimeT `gorm:"column:create_time" json:"createTime,omitempty"`
+	UpdateTime *dto.TimeT `gorm:"column:update_time" json:"updateTime,omitempty"`
 }
 
 func (User) TableName() string { return "tb_user" }
@@ -41,60 +41,60 @@ func (Shop) TableName() string { return "tb_shop" }
 
 // ShopType tb_shop_type。createTime/updateTime 为 @JsonIgnore，不参与 JSON。
 type ShopType struct {
-	Id         *int64        `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
-	Name       *string       `gorm:"column:name" json:"name,omitempty"`
-	Icon       *string       `gorm:"column:icon" json:"icon,omitempty"`
-	Sort       *int          `gorm:"column:sort" json:"sort,omitempty"`
-	CreateTime *dto.TimeT    `gorm:"column:create_time" json:"-"`
-	UpdateTime *dto.TimeT    `gorm:"column:update_time" json:"-"`
+	Id         *int64     `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
+	Name       *string    `gorm:"column:name" json:"name,omitempty"`
+	Icon       *string    `gorm:"column:icon" json:"icon,omitempty"`
+	Sort       *int       `gorm:"column:sort" json:"sort,omitempty"`
+	CreateTime *dto.TimeT `gorm:"column:create_time" json:"-"`
+	UpdateTime *dto.TimeT `gorm:"column:update_time" json:"-"`
 }
 
 func (ShopType) TableName() string { return "tb_shop_type" }
 
 // Voucher tb_voucher。stock/beginTime/endTime 来自 LEFT JOIN，非表列。
 type Voucher struct {
-	Id          *int64        `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
-	ShopId      *int64        `gorm:"column:shop_id" json:"shopId,omitempty"`
-	Title       *string       `gorm:"column:title" json:"title,omitempty"`
-	SubTitle    *string       `gorm:"column:sub_title" json:"subTitle,omitempty"`
-	Rules       *string       `gorm:"column:rules" json:"rules,omitempty"`
-	PayValue    *int64        `gorm:"column:pay_value" json:"payValue,omitempty"`
-	ActualValue *int64        `gorm:"column:actual_value" json:"actualValue,omitempty"`
-	Type        *int          `gorm:"column:type" json:"type,omitempty"`
-	Status      *int          `gorm:"column:status" json:"status,omitempty"`
-	Stock       *int          `gorm:"column:stock" json:"stock,omitempty"`
-	BeginTime   *dto.TimeT    `gorm:"column:begin_time" json:"beginTime,omitempty"`
-	EndTime     *dto.TimeT    `gorm:"column:end_time" json:"endTime,omitempty"`
-	CreateTime  *dto.TimeT    `gorm:"column:create_time" json:"createTime,omitempty"`
-	UpdateTime  *dto.TimeT    `gorm:"column:update_time" json:"updateTime,omitempty"`
+	Id          *int64     `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
+	ShopId      *int64     `gorm:"column:shop_id" json:"shopId,omitempty"`
+	Title       *string    `gorm:"column:title" json:"title,omitempty"`
+	SubTitle    *string    `gorm:"column:sub_title" json:"subTitle,omitempty"`
+	Rules       *string    `gorm:"column:rules" json:"rules,omitempty"`
+	PayValue    *int64     `gorm:"column:pay_value" json:"payValue,omitempty"`
+	ActualValue *int64     `gorm:"column:actual_value" json:"actualValue,omitempty"`
+	Type        *int       `gorm:"column:type" json:"type,omitempty"`
+	Status      *int       `gorm:"column:status" json:"status,omitempty"`
+	Stock       *int       `gorm:"column:stock" json:"stock,omitempty"`
+	BeginTime   *dto.TimeT `gorm:"column:begin_time" json:"beginTime,omitempty"`
+	EndTime     *dto.TimeT `gorm:"column:end_time" json:"endTime,omitempty"`
+	CreateTime  *dto.TimeT `gorm:"column:create_time" json:"createTime,omitempty"`
+	UpdateTime  *dto.TimeT `gorm:"column:update_time" json:"updateTime,omitempty"`
 }
 
 func (Voucher) TableName() string { return "tb_voucher" }
 
 // SeckillVoucher tb_seckill_voucher
 type SeckillVoucher struct {
-	VoucherId  *int64        `gorm:"column:voucher_id;primaryKey" json:"voucherId,omitempty"`
-	Stock      *int          `gorm:"column:stock" json:"stock,omitempty"`
-	CreateTime *dto.TimeT    `gorm:"column:create_time" json:"createTime,omitempty"`
-	BeginTime  *dto.TimeT    `gorm:"column:begin_time" json:"beginTime,omitempty"`
-	EndTime    *dto.TimeT    `gorm:"column:end_time" json:"endTime,omitempty"`
-	UpdateTime *dto.TimeT    `gorm:"column:update_time" json:"updateTime,omitempty"`
+	VoucherId  *int64     `gorm:"column:voucher_id;primaryKey" json:"voucherId,omitempty"`
+	Stock      *int       `gorm:"column:stock" json:"stock,omitempty"`
+	CreateTime *dto.TimeT `gorm:"column:create_time" json:"createTime,omitempty"`
+	BeginTime  *dto.TimeT `gorm:"column:begin_time" json:"beginTime,omitempty"`
+	EndTime    *dto.TimeT `gorm:"column:end_time" json:"endTime,omitempty"`
+	UpdateTime *dto.TimeT `gorm:"column:update_time" json:"updateTime,omitempty"`
 }
 
 func (SeckillVoucher) TableName() string { return "tb_seckill_voucher" }
 
 // VoucherOrder tb_voucher_order（Kafka 消息仅含 id/userId/voucherId）
 type VoucherOrder struct {
-	Id         *int64        `gorm:"column:id;primaryKey" json:"id,omitempty"`
-	UserId     *int64        `gorm:"column:user_id" json:"userId,omitempty"`
-	VoucherId  *int64        `gorm:"column:voucher_id" json:"voucherId,omitempty"`
-	PayType    *int          `gorm:"column:pay_type" json:"payType,omitempty"`
-	Status     *int          `gorm:"column:status" json:"status,omitempty"`
-	CreateTime *dto.TimeT    `gorm:"column:create_time" json:"createTime,omitempty"`
-	PayTime    *dto.TimeT    `gorm:"column:pay_time" json:"payTime,omitempty"`
-	UseTime    *dto.TimeT    `gorm:"column:use_time" json:"useTime,omitempty"`
-	RefundTime *dto.TimeT    `gorm:"column:refund_time" json:"refundTime,omitempty"`
-	UpdateTime *dto.TimeT    `gorm:"column:update_time" json:"updateTime,omitempty"`
+	Id         *int64     `gorm:"column:id;primaryKey" json:"id,omitempty"`
+	UserId     *int64     `gorm:"column:user_id" json:"userId,omitempty"`
+	VoucherId  *int64     `gorm:"column:voucher_id" json:"voucherId,omitempty"`
+	PayType    *int       `gorm:"column:pay_type" json:"payType,omitempty"`
+	Status     *int       `gorm:"column:status" json:"status,omitempty"`
+	CreateTime *dto.TimeT `gorm:"column:create_time" json:"createTime,omitempty"`
+	PayTime    *dto.TimeT `gorm:"column:pay_time" json:"payTime,omitempty"`
+	UseTime    *dto.TimeT `gorm:"column:use_time" json:"useTime,omitempty"`
+	RefundTime *dto.TimeT `gorm:"column:refund_time" json:"refundTime,omitempty"`
+	UpdateTime *dto.TimeT `gorm:"column:update_time" json:"updateTime,omitempty"`
 }
 
 func (VoucherOrder) TableName() string { return "tb_voucher_order" }

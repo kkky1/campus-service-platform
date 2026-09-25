@@ -74,12 +74,12 @@ var retryBackoffs = []time.Duration{100 * time.Millisecond, 500 * time.Milliseco
 
 // Consumer Kafka 消费者：手动 commit，失败重试 3 次后投 DLT。
 type Consumer struct {
-	r       *kafka.Reader
-	dltW    *kafka.Writer
-	proc    OrderProcessor
-	log     *slog.Logger
-	topic   string
-	isDLT   bool
+	r     *kafka.Reader
+	dltW  *kafka.Writer
+	proc  OrderProcessor
+	log   *slog.Logger
+	topic string
+	isDLT bool
 }
 
 // NewMainConsumer 主消费者（seckill.order）。

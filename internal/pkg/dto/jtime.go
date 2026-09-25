@@ -14,9 +14,9 @@ import (
 // Unmarshal 均兼容两种日期时间格式，保证能解析 Java 版写入 Redis 的缓存内容。
 
 const (
-	layoutT      = "2006-01-02T15:04:05"
-	layoutSpace  = "2006-01-02 15:04:05"
-	layoutDate   = "2006-01-02"
+	layoutT     = "2006-01-02T15:04:05"
+	layoutSpace = "2006-01-02 15:04:05"
+	layoutDate  = "2006-01-02"
 )
 
 func parseFlex(s string) (time.Time, error) {

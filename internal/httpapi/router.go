@@ -61,5 +61,23 @@ func NewRouter(h *Handlers) *gin.Engine {
 	// 秒杀下单
 	r.POST("/voucher-order/seckill/:id", h.SeckillVoucher)
 
+	// RAG 知识库（可选模块）
+	if h.Rag != nil {
+		rag := r.Group("/rag")
+		{
+			rag.POST("/kb", h.Rag.CreateKB)
+			rag.GET("/kb/list", h.Rag.ListKB)
+			rag.DELETE("/kb/:id", h.Rag.DeleteKB)
+			rag.POST("/doc/upload", h.Rag.UploadDoc)
+			rag.GET("/doc/list", h.Rag.ListDocs)
+			rag.GET("/doc/:id/chunks", h.Rag.DocChunks)
+			rag.DELETE("/doc/:id", h.Rag.DeleteDoc)
+			rag.POST("/chat", h.Rag.Chat)
+			rag.POST("/retrieve", h.Rag.Retrieve)
+			rag.POST("/eval/run", h.Rag.EvalRun)
+			rag.GET("/eval/:id", h.Rag.EvalGet)
+		}
+	}
+
 	return r
 }

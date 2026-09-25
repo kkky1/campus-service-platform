@@ -179,11 +179,11 @@ func (a *App) QueryShopByType(ctx context.Context, typeId int64, current int, x,
 	end := current * rds.DefaultPageSize
 	// GEORADIUS：与 Java 版 GEOSEARCH 语义一致（距离升序 + 5000m），兼容 Redis 6.0 与 7.x
 	res, err := a.RDB.GeoRadius(ctx, key, *x, *y, &redis.GeoRadiusQuery{
-		Radius:  rds.GeoRadiusM,
-		Unit:    "m",
+		Radius:   rds.GeoRadiusM,
+		Unit:     "m",
 		WithDist: true,
-		Sort:    "ASC",
-		Count:   end,
+		Sort:     "ASC",
+		Count:    end,
 	}).Result()
 	if err != nil {
 		return dto.Fail("服务器异常")

@@ -5,19 +5,19 @@ import "time"
 
 // 键前缀
 const (
-	LoginCodeKey   = "login:code:"
-	LoginUserKey   = "login:token:"
-	CacheShopKey   = "cache:shop:"
-	LockShopKey    = "lock:shop:"
+	LoginCodeKey    = "login:code:"
+	LoginUserKey    = "login:token:"
+	CacheShopKey    = "cache:shop:"
+	LockShopKey     = "lock:shop:"
 	SeckillStockKey = "seckill:stock:"
 	SeckillOrderKey = "seckill:order:"
-	IcrOrderKey    = "icr:order:"
-	BlogLikedKey   = "blog:liked:"
-	FeedKey        = "feed:"
-	ShopGeoKey     = "shop:geo:"
-	ShopTypeKey    = "shop_type:"
-	UserSignKey    = "sign:"
-	FollowsKey     = "follows:"
+	IcrOrderKey     = "icr:order:"
+	BlogLikedKey    = "blog:liked:"
+	FeedKey         = "feed:"
+	ShopGeoKey      = "shop:geo:"
+	ShopTypeKey     = "shop_type:"
+	UserSignKey     = "sign:"
+	FollowsKey      = "follows:"
 )
 
 // TTL（对齐原 RedisConstants 与实际生效值）

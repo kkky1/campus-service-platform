@@ -17,6 +17,13 @@ import (
 // Handlers 持有 App 的处理器集合。
 type Handlers struct {
 	App *service.App
+	Rag *RagHandlers // 可选：RAG 模块处理器
+}
+
+// WithRag 注入 RAG 处理器。
+func (h *Handlers) WithRag(r *RagHandlers) *Handlers {
+	h.Rag = r
+	return h
 }
 
 // New 构造处理器。
