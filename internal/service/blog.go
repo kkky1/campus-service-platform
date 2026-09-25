@@ -166,10 +166,11 @@ func (a *App) QueryBlogLikes(ctx context.Context, blogId int64) dto.Result {
 	return dto.OkData(out)
 }
 
-// QueryBlogOfMe 我的动态（页大小 10，无附加字段）。
+// QueryBlogOfMe 我的动态（页大小 10，按发布时间倒序，无附加字段）。
 func (a *App) QueryBlogOfMe(ctx context.Context, userId int64, current int) dto.Result {
 	var blogs []repo.Blog
 	if err := a.DB.WithContext(ctx).Where("user_id = ?", userId).
+		Order("id DESC").
 		Offset((current - 1) * rds.MaxPageSize).Limit(rds.MaxPageSize).
 		Find(&blogs).Error; err != nil {
 		return dto.Fail("服务器异常")

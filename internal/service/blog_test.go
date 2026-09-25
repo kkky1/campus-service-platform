@@ -39,3 +39,24 @@ func TestSaveBlogPushesFeed(t *testing.T) {
 		}
 	}
 }
+
+// B7 修复回归：我的动态按 id 倒序（超过一页时最新动态必须在第一页）
+func TestQueryBlogOfMeNewestFirst(t *testing.T) {
+	app, _ := newAppEnv(t)
+	ctx := context.Background()
+	for i := 1; i <= 15; i++ {
+		id := int64(i)
+		app.DB.Create(&repo.Blog{Id: &id, UserId: int64Ptr(7), Title: strPtr("b"), Images: strPtr(""), Content: strPtr("c")})
+	}
+	res := app.QueryBlogOfMe(ctx, 7, 1)
+	list := res.Data.([]repo.Blog)
+	if len(list) != 10 {
+		t.Fatalf("第一页应为 10 条: %d", len(list))
+	}
+	if list[0].Id == nil || *list[0].Id != 15 {
+		t.Fatalf("第一页首条应为最新 id=15: %v", list[0].Id)
+	}
+	if list[9].Id == nil || *list[9].Id != 6 {
+		t.Fatalf("第一页末条应为 id=6: %v", list[9].Id)
+	}
+}
