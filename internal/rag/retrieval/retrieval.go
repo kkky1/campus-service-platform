@@ -16,18 +16,19 @@ import (
 
 // Candidate 检索候选项。
 type Candidate struct {
-	ChunkID      int64    `json:"chunkId"`
-	DocID        int64    `json:"docId"`
-	DocName      string   `json:"docName,omitempty"`
-	Index        int      `json:"index"`
-	Text         string   `json:"text"`
-	Headings     []string `json:"headings,omitempty"`
-	Tags         []string `json:"tags,omitempty"`
-	Page         int      `json:"page,omitempty"`
-	Offset       int      `json:"offset,omitempty"`
-	VectorScore  float64  `json:"vectorScore"`
-	KeywordScore float64  `json:"keywordScore"`
-	Score        float64  `json:"score"`
+	ChunkID      int64     `json:"chunkId"`
+	DocID        int64     `json:"docId"`
+	DocName      string    `json:"docName,omitempty"`
+	Index        int       `json:"index"`
+	Text         string    `json:"text"`
+	Headings     []string  `json:"headings,omitempty"`
+	Tags         []string  `json:"tags,omitempty"`
+	Page         int       `json:"page,omitempty"`
+	Offset       int       `json:"offset,omitempty"`
+	VectorScore  float64   `json:"vectorScore"`
+	KeywordScore float64   `json:"keywordScore"`
+	Score        float64   `json:"score"`
+	Vector       []float32 `json:"-"` // 原始向量（引用对齐用）
 }
 
 // Retriever 检索器。
@@ -125,6 +126,7 @@ func (r *Retriever) Retrieve(ctx context.Context, kbId int64, query string, topK
 			VectorScore:  vecN,
 			KeywordScore: kwN,
 			Score:        score,
+			Vector:       embed.DecodeVector(c.Embedding),
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
