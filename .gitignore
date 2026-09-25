@@ -42,3 +42,7 @@ build/
 front/logs/
 front/temp/
 front/nginx.exe
+
+### Go ###
+bin/
+data/
