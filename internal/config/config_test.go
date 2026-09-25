@@ -68,3 +68,34 @@ func TestYamlFile(t *testing.T) {
 		t.Errorf("yaml 解析不对: %+v", cfg)
 	}
 }
+
+func TestRAGDefaults(t *testing.T) {
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RAG.Chunk.TokenNum != 256 || cfg.RAG.Embedding.Provider != "local" || cfg.RAG.Embedding.Dim != 384 {
+		t.Fatalf("RAG 默认值不对: %+v", cfg.RAG)
+	}
+	if cfg.RAG.Retrieval.TopK != 8 || cfg.RAG.Citation.Threshold != 0.63 {
+		t.Fatalf("检索/引用默认值不对: %+v", cfg.RAG)
+	}
+}
+
+func TestRAGEnvOverride(t *testing.T) {
+	os.Setenv("RAG_EMBEDDING_PROVIDER", "openai")
+	os.Setenv("RAG_EMBEDDING_API_KEY", "sk-test")
+	os.Setenv("RAG_LLM_MODEL", "deepseek-chat-x")
+	defer func() {
+		os.Unsetenv("RAG_EMBEDDING_PROVIDER")
+		os.Unsetenv("RAG_EMBEDDING_API_KEY")
+		os.Unsetenv("RAG_LLM_MODEL")
+	}()
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RAG.Embedding.Provider != "openai" || cfg.RAG.Embedding.APIKey != "sk-test" || cfg.RAG.LLM.Model != "deepseek-chat-x" {
+		t.Fatalf("RAG 环境变量覆盖失败: %+v", cfg.RAG)
+	}
+}

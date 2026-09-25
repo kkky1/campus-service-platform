@@ -10,3 +10,17 @@ kafka:
     - localhost:9092
 upload:
   dir: ./data/uploads
+rag:
+  chunk:
+    token_num: 256
+    overlap_percent: 10
+  embedding:
+    provider: local
+    dim: 384
+  llm:
+    base_url: https://api.deepseek.com
+    model: deepseek-chat
+  retrieval:
+    top_k: 8
+    vector_weight: 0.7
+    keyword_weight: 0.3
