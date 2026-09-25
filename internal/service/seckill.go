@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -13,8 +14,21 @@ import (
 	"campus-service-platform/scripts/lua"
 )
 
-// AddVoucher 券发布：/voucher 与 /voucher/seckill 行为一致（事务双表 + Redis 库存预载）。
-func (a *App) AddVoucher(ctx context.Context, v *repo.Voucher) dto.Result {
+// AddPlainVoucher 发布普通券：仅插入 tb_voucher（无库存概念）。
+func (a *App) AddPlainVoucher(ctx context.Context, v *repo.Voucher) dto.Result {
+	if v.Title == nil || strings.TrimSpace(*v.Title) == "" {
+		return dto.Fail("券标题不能为空")
+	}
+	cols := voucherColumns(v)
+	if err := a.DB.WithContext(ctx).Select(cols).Create(v).Error; err != nil {
+		a.Log.Error("发布普通券失败", "err", err)
+		return dto.Fail("服务器异常")
+	}
+	return dto.OkData(*v.Id)
+}
+
+// AddSeckillVoucher 发布秒杀券：事务双表 + Redis 库存预载（stock 必填）。
+func (a *App) AddSeckillVoucher(ctx context.Context, v *repo.Voucher) dto.Result {
 	if v.Stock == nil {
 		// 原系统：库存预载阶段 NPE → 全局异常，事务回滚
 		return dto.Fail("服务器异常")

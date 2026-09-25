@@ -55,7 +55,7 @@ func NewRouter(h *Handlers) *gin.Engine {
 
 	// 券
 	r.POST("/voucher", h.AddVoucher)
-	r.POST("/voucher/seckill", h.AddVoucher)
+	r.POST("/voucher/seckill", h.AddSeckillVoucher)
 	r.GET("/voucher/list/:shopId", h.QueryVoucherOfShop)
 
 	// 秒杀下单

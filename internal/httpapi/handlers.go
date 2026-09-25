@@ -316,14 +316,24 @@ func (h *Handlers) FollowCommons(c *gin.Context) {
 
 // --- 券与秒杀 ---
 
-// AddVoucher POST /voucher 与 POST /voucher/seckill（行为一致）
+// AddVoucher POST /voucher（普通券）
 func (h *Handlers) AddVoucher(c *gin.Context) {
 	var v repo.Voucher
 	if err := c.ShouldBindJSON(&v); err != nil {
 		c.JSON(200, dto.Fail("服务器异常"))
 		return
 	}
-	c.JSON(200, h.App.AddVoucher(c.Request.Context(), &v))
+	c.JSON(200, h.App.AddPlainVoucher(c.Request.Context(), &v))
+}
+
+// AddSeckillVoucher POST /voucher/seckill（秒杀券）
+func (h *Handlers) AddSeckillVoucher(c *gin.Context) {
+	var v repo.Voucher
+	if err := c.ShouldBindJSON(&v); err != nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	c.JSON(200, h.App.AddSeckillVoucher(c.Request.Context(), &v))
 }
 
 // QueryVoucherOfShop GET /voucher/list/{shopId}

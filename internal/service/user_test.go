@@ -105,3 +105,42 @@ func TestUploadAndDelete(t *testing.T) {
 
 var _ = gorm.Expr
 var _ = repo.User{}
+
+// B3 修复回归：删除接口路径穿越防护
+func TestDeleteImagePathTraversal(t *testing.T) {
+	app, _ := newServiceEnv(t)
+	ctx := context.Background()
+	// 上传目录外放置一个"诱饵"文件
+	outside := filepath.Join(filepath.Dir(app.UploadDir), "victim.txt")
+	if err := os.WriteFile(outside, []byte("don't delete me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// 多种越界形式都应被拒绝
+	for _, evil := range []string{
+		"../victim.txt",
+		"../../" + filepath.Base(filepath.Dir(app.UploadDir)) + "/victim.txt",
+		"/../victim.txt",
+		"..%2Fvictim.txt", //（作为普通字符串不触发编码，验证无碍）
+	} {
+		res := app.DeleteImage(ctx, evil)
+		if res.Success && res.ErrorMsg == nil {
+			// 允许"无害成功"，但诱饵文件必须还在（除最后一个非转义形式）
+			if evil != "..%2Fvictim.txt" {
+				if _, err := os.Stat(outside); os.IsNotExist(err) {
+					t.Fatalf("越界删除破坏了目录外文件: %s", evil)
+				}
+			}
+			continue
+		}
+		if res.ErrorMsg == nil || *res.ErrorMsg != "错误的文件名称" {
+			t.Fatalf("越界路径应返回错误文件名称: %s -> %v", evil, res)
+		}
+	}
+	// 目录内正常文件删除不受影响
+	res := app.UploadImage(ctx, "ok.png", []byte("data"))
+	rel := res.Data.(string)
+	_ = app.DeleteImage(ctx, rel)
+	if _, err := os.Stat(filepath.Join(app.UploadDir, filepath.FromSlash(rel))); !os.IsNotExist(err) {
+		t.Fatal("目录内文件应可正常删除")
+	}
+}

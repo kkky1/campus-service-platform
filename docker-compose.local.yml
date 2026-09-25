@@ -90,6 +90,8 @@ services:
     container_name: hmdp-nginx
     ports:
       - "8080:80"
+    volumes:
+      - hmdp-upload-data:/data/uploads:ro
     depends_on:
       - mysql
       - redis

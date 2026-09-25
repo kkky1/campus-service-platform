@@ -2,7 +2,8 @@
 # 说明：GitHub Actions / 联网良好环境可直接用多阶段 Dockerfile 从源码构建；
 #       本机（国内 VPS）容器内下载 Go 依赖过慢，故采用"宿主机构建 + 瘦镜像"。
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app \
+    && mkdir -p /data/uploads && chown -R app:app /data
 USER app
 WORKDIR /app
 COPY bin/campus-server /app/campus-server

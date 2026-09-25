@@ -124,9 +124,15 @@ func (a *App) UploadImage(ctx context.Context, originalFilename string, data []b
 	return dto.OkData(rel)
 }
 
-// DeleteImage 删除上传图片；目录路径拒绝。
+// DeleteImage 删除上传图片；目录路径拒绝；越界路径（路径穿越）拒绝。
 func (a *App) DeleteImage(ctx context.Context, name string) dto.Result {
-	full := filepath.Join(a.UploadDir, filepath.FromSlash(name))
+	// 规范化并锚定在上传目录内：/../x、绝对路径等一律收敛到目录内
+	clean := filepath.Clean("/" + filepath.ToSlash(name))
+	full := filepath.Join(a.UploadDir, filepath.FromSlash(clean))
+	base := filepath.Clean(a.UploadDir)
+	if full != base && !strings.HasPrefix(full, base+string(os.PathSeparator)) {
+		return dto.Fail("错误的文件名称")
+	}
 	st, err := os.Stat(full)
 	if err == nil && st.IsDir() {
 		return dto.Fail("错误的文件名称")

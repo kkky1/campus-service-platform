@@ -6,19 +6,33 @@
 
 ## ADDED Requirements
 
-### Requirement: 券发布（普通与秒杀同路径）
+### Requirement: 普通券发布
 
-系统 SHALL 提供 `POST /voucher` 与 `POST /voucher/seckill` 两个接口，两者行为完全一致：事务内插入 `tb_voucher` 与 `tb_seckill_voucher`（含 `voucher_id`、`stock`、`begin_time`、`end_time`），并将库存写入 Redis 字符串键 `seckill:stock:{voucherId}`；返回 `data=voucherId`。
+系统 SHALL 提供 `POST /voucher` 接口，仅插入 `tb_voucher`（不写秒杀表、不预载库存），返回 `data=voucherId`；标题为空时返回 `success=false`、`errorMsg="券标题不能为空"`。
+
+#### Scenario: 发布普通券
+
+- **WHEN** 提交含标题的券数据（可不含 stock）
+- **THEN** `tb_voucher` 新增记录并返回其 id；`tb_seckill_voucher` 与 `seckill:stock:{id}` 均无变化
+
+#### Scenario: 标题为空
+
+- **WHEN** 请求体不含标题
+- **THEN** 返回 `success=false`，`errorMsg="券标题不能为空"`，不产生任何记录
+
+### Requirement: 秒杀券发布
+
+系统 SHALL 提供 `POST /voucher/seckill` 接口，事务内插入 `tb_voucher` 与 `tb_seckill_voucher`（含 `voucher_id`、`stock`、`begin_time`、`end_time`），并将库存写入 Redis 键 `seckill:stock:{voucherId}`；`stock` 缺失时返回 `success=false`、`errorMsg="服务器异常"` 且事务回滚。
 
 #### Scenario: 发布秒杀券
 
 - **WHEN** 提交含 stock、beginTime、endTime 的券数据
-- **THEN** 两张表各新增一条关联记录，且 Redis 键 `seckill:stock:{voucherId}` 等于 stock，返回 `data=voucherId`
+- **THEN** 两张表各新增一条记录，Redis 键 `seckill:stock:{voucherId}` 等于 stock，返回 `data=voucherId`
 
-#### Scenario: 发布普通券（无秒杀字段）
+#### Scenario: 缺少 stock
 
-- **WHEN** 提交不含 stock 的券数据
-- **THEN** 返回 `success=false`、`errorMsg="服务器异常"`，且两张表均无新增记录（与原系统一致：库存预载阶段报错并回滚事务）
+- **WHEN** 请求体无 stock
+- **THEN** 返回 `success=false`、`errorMsg="服务器异常"`，两张表均无新增记录
 
 ### Requirement: 店铺券列表
 

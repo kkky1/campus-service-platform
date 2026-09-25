@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -267,15 +268,28 @@ func TestVoucherContract(t *testing.T) {
 	if d["stock"] != float64(100) || d["beginTime"] == nil {
 		t.Fatalf("券列表 JOIN 字段: %v", d)
 	}
-	// 无 stock 发布 → 服务器异常且无记录（对齐原 NPE 回滚行为）
-	_, m = doJSON(t, r, "POST", "/voucher", `{"shopId":1,"title":"x","status":1}`, nil)
-	if m["errorMsg"] != "服务器异常" {
-		t.Fatalf("无 stock 发布: %v", m)
+	// 普通券（无 stock）：只插 tb_voucher，不建秒杀表、不预载库存
+	_, m = doJSON(t, r, "POST", "/voucher", `{"shopId":1,"title":"普通券","status":1,"type":0}`, nil)
+	if m["success"] != true {
+		t.Fatalf("普通券发布: %v", m)
 	}
+	plainId := int64(m["data"].(float64))
 	var cnt int64
-	db.Model(&repo.Voucher{}).Where("title = ?", "x").Count(&cnt)
+	db.Model(&repo.Voucher{}).Where("id = ?", plainId).Count(&cnt)
+	if cnt != 1 {
+		t.Fatalf("普通券未入库: %d", cnt)
+	}
+	db.Model(&repo.SeckillVoucher{}).Where("voucher_id = ?", plainId).Count(&cnt)
 	if cnt != 0 {
-		t.Fatalf("事务未回滚: %d", cnt)
+		t.Fatalf("普通券不应写入秒杀表: %d", cnt)
+	}
+	if v, _ := mr.Get(rds.SeckillStockKey + fmt.Sprint(plainId)); v != "" {
+		t.Fatalf("普通券不应预载库存: %q", v)
+	}
+	// 标题为空 → 友好报错
+	_, m = doJSON(t, r, "POST", "/voucher", `{"shopId":1}`, nil)
+	if m["errorMsg"] != "券标题不能为空" {
+		t.Fatalf("空标题: %v", m)
 	}
 }
 

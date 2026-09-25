@@ -37,6 +37,9 @@ if ! docker exec hmdp-mysql mysql -uroot -p123456 hmdp -N -e 'SHOW TABLES LIKE "
     (echo "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';"; cat db/hmdp.sql) | docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp
 fi
 
+# 6a. 修正上传卷属主（容器以 uid 10001 运行）
+docker run --rm -v hmdp-upload-data:/data alpine:3.20 chown -R 10001:10001 /data 2>/dev/null || true
+
 # 6. 宿主机编译二进制（容器内下载依赖过慢），再构建瘦镜像并启动
 export PATH=$PATH:/usr/local/go/bin
 echo "[deploy] 编译 Go 二进制"
