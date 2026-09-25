@@ -82,13 +82,12 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:1.25-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.front
     container_name: hmdp-nginx
     ports:
       - "8080:80"
-    volumes:
-      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
-      - ./front/html/hmdp:/usr/share/nginx/html:ro
     depends_on:
       - mysql
       - redis

@@ -1,0 +1,53 @@
+name: Frontend CI - 前端打包
+
+# 前端为预构建静态资源（front/html/hmdp），本工作流负责：
+# 1. 静态资源完整性校验
+# 2. 打包 tar.gz 并上传 Actions artifact（可下载分发）
+# 3. 构建前端镜像（Dockerfile.front：静态资源 + nginx 一体，验证可打包）
+# 部署：服务器拉取式 CD（campus-deploy.timer）会在代码合入 main 后
+#       docker compose up --build 自动重建 nginx 前端镜像。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "front/**"
+      - "Dockerfile.front"
+      - "nginx.local.conf"
+      - ".github/workflows/frontend.yml"
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: 校验与打包
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 静态资源完整性校验
+        run: |
+          set -e
+          for f in index.html login.html shop-list.html js/axios.min.js js/common.js js/vue.js js/element.js; do
+            test -f "front/html/hmdp/$f" || { echo "缺少 $f"; exit 1; }
+          done
+          echo "静态资源校验通过（$(find front/html/hmdp -type f | wc -l) 个文件）"
+
+      - name: 打包前端 tar.gz
+        run: |
+          VERSION="${GITHUB_SHA::7}"
+          tar czf "campus-frontend-${VERSION}.tar.gz" -C front/html/hmdp .
+          ls -lh "campus-frontend-${VERSION}.tar.gz"
+          sha256sum "campus-frontend-${VERSION}.tar.gz" > "campus-frontend-${VERSION}.sha256"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: 构建前端镜像（验证 Dockerfile.front 可打包）
+        run: docker build -f Dockerfile.front -t "campus-frontend:${VERSION}" .
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: campus-frontend-${{ env.VERSION }}
+          path: |
+            campus-frontend-*.tar.gz
+            campus-frontend-*.sha256
+          retention-days: 14

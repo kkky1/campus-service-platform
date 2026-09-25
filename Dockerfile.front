@@ -1,0 +1,5 @@
+# 前端打包镜像：静态资源 + nginx 配置一体（无外部挂载依赖）
+FROM nginx:1.25-alpine
+COPY nginx.local.conf /etc/nginx/nginx.conf
+COPY front/html/hmdp /usr/share/nginx/html
+EXPOSE 80
