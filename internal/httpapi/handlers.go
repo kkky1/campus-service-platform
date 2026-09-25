@@ -37,17 +37,22 @@ func (h *Handlers) SendCode(c *gin.Context) {
 }
 
 // Login POST /user/login
+// 注意：code 允许缺省（验证码校验关闭时前端可留空）；缺省时按空字符串处理。
 func (h *Handlers) Login(c *gin.Context) {
 	var body struct {
 		Phone    *string `json:"phone"`
 		Code     *string `json:"code"`
 		Password *string `json:"password"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.Phone == nil || body.Code == nil {
-		c.JSON(200, dto.Fail("服务器异常"))
+	if err := c.ShouldBindJSON(&body); err != nil || body.Phone == nil {
+		c.JSON(200, dto.Fail("手机号不能为空"))
 		return
 	}
-	c.JSON(200, h.App.Login(c.Request.Context(), *body.Phone, *body.Code))
+	code := ""
+	if body.Code != nil {
+		code = *body.Code
+	}
+	c.JSON(200, h.App.Login(c.Request.Context(), *body.Phone, code))
 }
 
 // Logout POST /user/logout（原行为：恒"功能未完成"）

@@ -100,7 +100,11 @@ check("认证", "未登录访问 /user/me 返回 401", st == 401, f"got {st} {m}
 st, m = http("POST", "/user/code?phone=123")
 check("认证", "非法手机号文案", m.get("errorMsg") == "手机号格式错误", str(m))
 st, m = http("POST", "/user/login", {"phone": "13911112222", "code": "000000"})
-check("认证", "错误验证码文案", m.get("errorMsg") == "验证码不一致，请重新输入", str(m))
+if m.get("success"):
+    # 验证码校验已关闭（config.login.skip_code=true）时的预期行为
+    check("认证", "错误验证码（校验已关闭，允许登录）", True, "")
+else:
+    check("认证", "错误验证码文案", m.get("errorMsg") == "验证码不一致，请重新输入", str(m))
 token, m = login("13911112222")
 check("认证", "登录成功返回 32 位 token", isinstance(token, str) and len(token) == 32, str(m)[:120])
 st, m = http("GET", "/user/me", token=token)

@@ -151,3 +151,26 @@ func TestLogoutKeepsOriginalBehavior(t *testing.T) {
 }
 
 var _ = dto.Ok
+
+// 回归：验证码留空（请求体缺 code 字段）不应报"服务器异常"
+func TestLoginWithoutCodeField(t *testing.T) {
+	r, _, app := newAuthTestEnv(t)
+	app.LoginSkipCode = true
+	// 缺省 code 字段 → 跳过校验时应登录成功
+	_, m := doJSON(t, r, "POST", "/user/login", `{"phone":"13800007777"}`, nil)
+	if m["success"] != true {
+		t.Fatalf("缺省 code 且跳过校验应成功: %v", m)
+	}
+	assertKeys(t, m, "success", "data")
+	// 未开启跳过（默认）时缺省 code 应提示验证码不一致，而不是服务器异常
+	app.LoginSkipCode = false
+	_, m = doJSON(t, r, "POST", "/user/login", `{"phone":"13800007777"}`, nil)
+	if m["errorMsg"] != "验证码不一致，请重新输入" {
+		t.Fatalf("默认校验下缺省 code 文案: %v", m)
+	}
+	// 缺手机号 → 明确文案
+	_, m = doJSON(t, r, "POST", "/user/login", `{}`, nil)
+	if m["errorMsg"] != "手机号不能为空" {
+		t.Fatalf("缺手机号文案: %v", m)
+	}
+}
