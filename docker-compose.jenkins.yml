@@ -1,0 +1,34 @@
+# Jenkins：自动化部署（替代原 systemd 定时拉取）
+# 启动：docker compose -f docker-compose.jenkins.yml up -d
+# 访问：本机 127.0.0.1:8090（通过 SSH 隧道访问），管理员账号见服务器 .env
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    user: root
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8080"   # 仅本机可访问（SSH 隧道）
+    environment:
+      JAVA_OPTS: >-
+        -Djenkins.install.runSetupWizard=false
+        -Dhudson.model.DownloadService.noSignatureCheck=true
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:-admin}
+      JENKINS_ADMIN_PASSWORD: ${JENKINS_ADMIN_PASSWORD:?请在 .env 中设置}
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - ./jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
+      # Docker（部署用）
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro
+      # Go 工具链与模块缓存（复用宿主机，构建更快）
+      - /usr/local/go:/usr/local/go:ro
+      - /root/go:/root/go
+      # 部署密钥与应用密钥（只读）
+      - /root/.ssh/id_ed25519:/run/secrets/github_deploy_key:ro
+      - ./.env:/run/secrets/app.env:ro
+
+volumes:
+  jenkins-data:
+    name: jenkins-data
