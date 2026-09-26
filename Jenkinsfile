@@ -33,7 +33,8 @@ pipeline {
             steps {
                 sh '''
                     set -a; . ./.env; set +a
-                    export TEST_MYSQL_DSN="campus:${MYSQL_APP_PASSWORD}@tcp(127.0.0.1:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local"
+                    export TEST_MYSQL_DSN="campus:${MYSQL_APP_PASSWORD}@tcp(mysql:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local"
+                    export TEST_REDIS_ADDR="redis:6379"
                     export TEST_REDIS_PASSWORD="${REDIS_PASSWORD}"
                     go build ./...
                     go vet ./...
@@ -68,7 +69,7 @@ pipeline {
             steps {
                 sh '''
                     for i in $(seq 1 30); do
-                        if curl -sf http://127.0.0.1:8081/shop-type/list > /dev/null; then
+                        if curl -sf http://backend:8081/shop-type/list > /dev/null; then
                             echo "✅ 健康检查通过（第 ${i} 次探测）"
                             exit 0
                         fi

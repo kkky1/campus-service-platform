@@ -35,7 +35,11 @@ func itMySQLDSN() string {
 
 func itRedis(t *testing.T) *redis.Client {
 	t.Helper()
-	rdb := redis.NewClient(&redis.Options{Addr: itRedisAddr, Password: os.Getenv("TEST_REDIS_PASSWORD"), DB: 13})
+	addr := itRedisAddr
+	if v := os.Getenv("TEST_REDIS_ADDR"); v != "" {
+		addr = v
+	}
+	rdb := redis.NewClient(&redis.Options{Addr: addr, Password: os.Getenv("TEST_REDIS_PASSWORD"), DB: 13})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := rdb.Ping(ctx).Err(); err != nil {

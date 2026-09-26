@@ -29,6 +29,15 @@ services:
       - /root/.ssh/id_ed25519:/run/secrets/github_deploy_key:ro
       - ./.env:/run/secrets/app.env:ro
 
+    networks:
+      - default
+      - campus-net
+
 volumes:
   jenkins-data:
     name: jenkins-data
+
+networks:
+  campus-net:
+    external: true
+    name: campus-service-platform_default
