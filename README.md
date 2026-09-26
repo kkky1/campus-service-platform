@@ -121,6 +121,24 @@ docker compose -f docker-compose.local.yml up -d --build
 - 后端：`:8081`（镜像用 `Dockerfile.prebuilt` 瘦镜像；`Dockerfile` 多阶段构建适合网络良好的 CI 环境）
 - 前端 + Nginx：`:8080`（前端镜像由 `Dockerfile.front` 打包：静态资源 + nginx 配置一体；`/api` 反向代理到后端）
 
+### 前端页面
+
+| 页面 | 功能 |
+|---|---|
+| index.html | 首页：签到（+5 积分/连续天数）、按名称搜索、分类入口、动态列表 |
+| shop-list.html | 店铺列表：分类切换、距离/热度/评分排序、名称搜索、触底分页 |
+| shop-detail.html | 店铺详情：福利券列表、立即抢券 |
+| blog-edit / blog-detail | 动态发布（关联服务点/图片上传）、详情（点赞/关注） |
+| info / info-edit | 我的：签到、知识库入口、资料编辑（昵称/头像/介绍/性别/校区/生日） |
+| rag.html | **知识库问答**：知识库管理、文档上传与状态、引用角标问答、RAGAS 评估面板 |
+
+### 安全与密钥（重要）
+
+- 所有端口仅绑定 `127.0.0.1`，只有 nginx 的 8080 对外；数据库/缓存/消息队列不再暴露。
+- 密钥集中在服务器端 `.env`（**已 gitignore，不入库**）：
+  `MYSQL_ROOT_PASSWORD`、`MYSQL_APP_PASSWORD`（应用专用最小权限账号）、`REDIS_PASSWORD`（Redis requirepass）、`RAG_LLM_API_KEY`。
+- 2026-09-26 曾发生弱密码导致的入侵清库事件（详见 `docs/security-incident.md`），当前已按照该文档完成加固。
+
 ### 部署与访问
 
 - **拉取式 CD**：服务器 systemd `campus-deploy.timer` 每 2 分钟执行 `scripts/deploy-poll.sh`——

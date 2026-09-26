@@ -5,11 +5,27 @@
 输出: /tmp/qa_report.txt
 """
 import json
+import os
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+
+# 从部署 .env 读取密钥（不入库）
+_ENV = {}
+def _load_env(path="/root/ykwork/campus-service-platform/.env"):
+    try:
+        for line in open(path):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                _ENV[k.strip()] = v.strip()
+    except OSError:
+        pass
+_load_env()
+MYSQL_PW = _ENV.get("MYSQL_ROOT_PASSWORD", "")
+REDIS_PW = _ENV.get("REDIS_PASSWORD", "")
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8081"
 REPORT = open("/tmp/qa_report.txt", "w")
@@ -54,12 +70,13 @@ def http(method, path, body=None, token=None, files=None, form=None):
 
 
 def redis_get(key):
-    out = subprocess.run(["docker", "exec", "hmdp-redis", "redis-cli", "GET", key], capture_output=True, text=True)
+    out = subprocess.run(["docker", "exec", "hmdp-redis", "redis-cli", "-a", REDIS_PW, "GET", key],
+                         capture_output=True, text=True)
     return out.stdout.strip()
 
 
 def mysql(sql):
-    out = subprocess.run(["docker", "exec", "hmdp-mysql", "mysql", "-uroot", "-p123456", "hmdp", "-N", "-e", sql],
+    out = subprocess.run(["docker", "exec", "hmdp-mysql", "mysql", "-uroot", f"-p{MYSQL_PW}", "hmdp", "-N", "-e", sql],
                          capture_output=True, text=True)
     if out.returncode != 0:
         return "ERR:" + out.stderr.strip()[:120]
