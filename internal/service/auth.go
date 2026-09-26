@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -101,6 +102,27 @@ func (a *App) Login(ctx context.Context, phone, code string) dto.Result {
 		return dto.Fail("服务器异常")
 	}
 	return dto.OkData(token)
+}
+
+// RefreshSession 更新 Redis 登录会话中的用户信息（资料修改后调用，避免 /user/me 返回旧值）。
+func (a *App) RefreshSession(ctx context.Context, token string, nickName, icon *string) {
+	if token == "" {
+		return
+	}
+	key := rds.LoginUserKey + token
+	fields := map[string]any{}
+	if nickName != nil && strings.TrimSpace(*nickName) != "" {
+		fields["nickName"] = strings.TrimSpace(*nickName)
+	}
+	if icon != nil {
+		fields["icon"] = *icon
+	}
+	if len(fields) == 0 {
+		return
+	}
+	if err := a.RDB.HSet(ctx, key, fields).Err(); err != nil {
+		a.Log.Warn("刷新登录会话失败", "err", err)
+	}
 }
 
 func orEmpty(s *string) string {

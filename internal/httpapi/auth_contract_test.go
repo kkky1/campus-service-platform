@@ -174,3 +174,18 @@ func TestLoginWithoutCodeField(t *testing.T) {
 		t.Fatalf("缺手机号文案: %v", m)
 	}
 }
+
+// 回归：修改昵称后当前会话（/user/me）立即反映新昵称
+func TestUpdateProfileRefreshesSession(t *testing.T) {
+	r, mr, _ := newAuthTestEnv(t)
+	token, _ := loginToken(t, r, mr, "13800006666")
+	auth := map[string]string{"authorization": token}
+	_, m := doJSON(t, r, "PUT", "/user/profile", `{"nickName":"新昵称","icon":""}`, auth)
+	if m["success"] != true {
+		t.Fatalf("更新资料失败: %v", m)
+	}
+	_, m = doJSON(t, r, "GET", "/user/me", "", auth)
+	if m["data"].(map[string]any)["nickName"] != "新昵称" {
+		t.Fatalf("/user/me 未反映新昵称: %v", m)
+	}
+}

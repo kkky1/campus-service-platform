@@ -90,6 +90,40 @@ func (h *Handlers) QueryUserById(c *gin.Context) {
 	c.JSON(200, h.App.QueryUserById(c.Request.Context(), id))
 }
 
+// UpdateProfile PUT /user/profile（昵称/头像）
+func (h *Handlers) UpdateProfile(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	var body struct {
+		NickName *string `json:"nickName"`
+		Icon     *string `json:"icon"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || u == nil || u.Id == nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	res := h.App.UpdateProfile(c.Request.Context(), *u.Id, body.NickName, body.Icon)
+	if res.Success {
+		h.App.RefreshSession(c.Request.Context(), c.GetHeader("authorization"), body.NickName, body.Icon)
+	}
+	c.JSON(200, res)
+}
+
+// UpdateUserInfo PUT /user/info（介绍/性别/校区/生日）
+func (h *Handlers) UpdateUserInfo(c *gin.Context) {
+	u := middleware.CurrentUser(c)
+	var body struct {
+		Introduce *string `json:"introduce"`
+		Gender    *bool   `json:"gender"`
+		City      *string `json:"city"`
+		Birthday  *string `json:"birthday"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || u == nil || u.Id == nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	c.JSON(200, h.App.UpsertUserInfo(c.Request.Context(), *u.Id, body.Introduce, body.Gender, body.City, body.Birthday))
+}
+
 // Sign POST /user/sign
 func (h *Handlers) Sign(c *gin.Context) {
 	u := middleware.CurrentUser(c)
@@ -185,7 +219,7 @@ func (h *Handlers) QueryShopByType(c *gin.Context) {
 	if v, e := strconv.ParseFloat(c.Query("y"), 64); e == nil {
 		y = &v
 	}
-	c.JSON(200, h.App.QueryShopByType(c.Request.Context(), typeId, current, x, y))
+	c.JSON(200, h.App.QueryShopByType(c.Request.Context(), typeId, current, x, y, c.Query("sortBy")))
 }
 
 // QueryShopByName GET /shop/of/name

@@ -199,12 +199,20 @@ func (a *App) UpdateShop(ctx context.Context, s *repo.Shop) dto.Result {
 	return dto.Ok()
 }
 
-// QueryShopByType 按类型分页；带坐标时走 GEO 5000m。
-func (a *App) QueryShopByType(ctx context.Context, typeId int64, current int, x, y *float64) dto.Result {
+// QueryShopByType 按类型分页；带坐标时走 GEO 5000m；sortBy 支持空/热度(comments)/评分(score)。
+func (a *App) QueryShopByType(ctx context.Context, typeId int64, current int, x, y *float64, sortBy string) dto.Result {
 	if x == nil || y == nil {
+		q := a.DB.WithContext(ctx).Where("type_id = ?", typeId)
+		switch sortBy {
+		case "comments":
+			q = q.Order("comments DESC")
+		case "score":
+			q = q.Order("score DESC")
+		default:
+			q = q.Order("id ASC")
+		}
 		var shops []repo.Shop
-		if err := a.DB.WithContext(ctx).Where("type_id = ?", typeId).
-			Offset((current - 1) * rds.DefaultPageSize).Limit(rds.DefaultPageSize).
+		if err := q.Offset((current - 1) * rds.DefaultPageSize).Limit(rds.DefaultPageSize).
 			Find(&shops).Error; err != nil {
 			return dto.Fail("服务器异常")
 		}

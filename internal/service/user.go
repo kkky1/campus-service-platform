@@ -149,3 +149,60 @@ func newUUID() string {
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
+
+// UpdateProfile 更新用户基础资料（昵称/头像）。
+func (a *App) UpdateProfile(ctx context.Context, userId int64, nickName, icon *string) dto.Result {
+	fields := map[string]any{}
+	if nickName != nil && strings.TrimSpace(*nickName) != "" {
+		fields["nick_name"] = strings.TrimSpace(*nickName)
+	}
+	if icon != nil {
+		fields["icon"] = *icon
+	}
+	if len(fields) == 0 {
+		return dto.Fail("没有需要更新的内容")
+	}
+	if err := a.DB.WithContext(ctx).Model(&repo.User{}).Where("id = ?", userId).Updates(fields).Error; err != nil {
+		a.Log.Error("更新用户资料失败", "err", err)
+		return dto.Fail("服务器异常")
+	}
+	return dto.Ok()
+}
+
+// UpsertUserInfo 更新/创建用户详情（介绍/性别/校区/生日）。
+func (a *App) UpsertUserInfo(ctx context.Context, userId int64, introduce *string, gender *bool, city *string, birthday *string) dto.Result {
+	fields := map[string]any{}
+	if introduce != nil {
+		fields["introduce"] = *introduce
+	}
+	if gender != nil {
+		fields["gender"] = *gender
+	}
+	if city != nil {
+		fields["city"] = *city
+	}
+	if birthday != nil && strings.TrimSpace(*birthday) != "" {
+		fields["birthday"] = strings.TrimSpace(*birthday)
+	}
+	if len(fields) == 0 {
+		return dto.Fail("没有需要更新的内容")
+	}
+	// 不存在则创建（user_id 主键）
+	var count int64
+	if err := a.DB.WithContext(ctx).Model(&repo.UserInfo{}).Where("user_id = ?", userId).Count(&count).Error; err != nil {
+		return dto.Fail("服务器异常")
+	}
+	if count == 0 {
+		// 仅插入主键列，create_time/update_time 走数据库默认值
+		info := repo.UserInfo{UserId: &userId}
+		if err := a.DB.WithContext(ctx).Select("user_id").Create(&info).Error; err != nil {
+			a.Log.Error("创建用户详情失败", "err", err)
+			return dto.Fail("服务器异常")
+		}
+	}
+	if err := a.DB.WithContext(ctx).Model(&repo.UserInfo{}).Where("user_id = ?", userId).Updates(fields).Error; err != nil {
+		a.Log.Error("更新用户详情失败", "err", err)
+		return dto.Fail("服务器异常")
+	}
+	return dto.Ok()
+}

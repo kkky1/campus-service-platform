@@ -144,3 +144,25 @@ func TestDeleteImagePathTraversal(t *testing.T) {
 		t.Fatal("目录内文件应可正常删除")
 	}
 }
+
+// 回归：用户详情不存在时创建（不因 NOT NULL 默认值失败）
+func TestUpsertUserInfoCreatesRow(t *testing.T) {
+	app, _ := newAppEnv(t)
+	ctx := context.Background()
+	intro, city := "校园介绍", "南区"
+	res := app.UpsertUserInfo(ctx, 42, &intro, nil, &city, nil)
+	if !res.Success {
+		t.Fatalf("创建用户详情失败: %v", res)
+	}
+	// 再次更新（已存在）
+	nickIntro := "新介绍"
+	res = app.UpsertUserInfo(ctx, 42, &nickIntro, nil, nil, nil)
+	if !res.Success {
+		t.Fatalf("更新用户详情失败: %v", res)
+	}
+	var info repo.UserInfo
+	app.DB.First(&info, 42)
+	if info.Introduce == nil || *info.Introduce != "新介绍" {
+		t.Fatalf("详情未更新: %+v", info)
+	}
+}

@@ -22,6 +22,8 @@ func NewRouter(h *Handlers) *gin.Engine {
 	r.GET("/user/info/:id", h.UserInfo)
 	r.GET("/user/sign/count", h.SignCount)
 	r.POST("/user/sign", h.Sign)
+	r.PUT("/user/profile", h.UpdateProfile)
+	r.PUT("/user/info", h.UpdateUserInfo)
 	r.GET("/user/:id", h.QueryUserById)
 
 	// 上传
