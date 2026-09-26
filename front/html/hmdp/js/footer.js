@@ -12,9 +12,9 @@ Vue.component("footBar", {
     <div class="foot-box" @click="toPage(0)">
       <img class="add-btn" src="/imgs/add.png" alt="">
     </div>
-    <div class="foot-box" :class="{active: activeBtn === 3}" @click="toPage(3)">
-      <div class="foot-view"><i class="el-icon-chat-dot-round"></i></div>
-      <div class="foot-text">互动</div>
+    <div class="foot-box" :class="{active: activeBtn === 5}" @click="toPage(5)">
+      <div class="foot-view"><i class="el-icon-reading"></i></div>
+      <div class="foot-text">知识库</div>
     </div>
     <div class="foot-box" :class="{active: activeBtn === 4}" @click="toPage(4)">
       <div class="foot-view"><i class="el-icon-user"></i></div>
@@ -33,8 +33,14 @@ Vue.component("footBar", {
         location.href = campusTheme.page("/blog-edit.html")
       } else if (i === 4) {
         location.href = campusTheme.page("/info.html")
-      } else if (i === 1){
-        location.href = campusTheme.page("/")
+      } else if (i === 1) {
+        location.href = campusTheme.page("/index.html")
+      } else if (i === 2) {
+        // 附近：进入店铺列表页
+        location.href = campusTheme.page("/shop-list.html?type=1&name=美食")
+      } else if (i === 5) {
+        // 知识库：RAG 问答页
+        location.href = campusTheme.page("/rag.html")
       }
     }
   }

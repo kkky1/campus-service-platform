@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <title>校园服务平台</title>
+  <link rel="stylesheet" href="./css/element.css">
+  <link href="./css/main.css?v=campus20260505c" rel="stylesheet">
+  <style>
+    html, body, #app { height: 100%; }
+    #app { display: flex; flex-direction: column; background: #f5f7f6; }
+    .rag-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 15px; background: #1f6f63; color: #fff;
+    }
+    .rag-header .back { font-size: 20px; cursor: pointer; }
+    .rag-header .title { font-size: 17px; font-weight: 600; }
+    .kb-bar { display: flex; gap: 8px; padding: 10px 15px; background: #fff; align-items: center; }
+    .kb-bar .kb-select { flex: 1; }
+    .rag-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .pane { flex: 1; overflow-y: auto; padding: 12px 15px 90px; }
+    /* 问答 */
+    .msg { margin-bottom: 14px; }
+    .msg .q { display: flex; justify-content: flex-end; }
+    .msg .q span { background: #1f6f63; color: #fff; padding: 8px 12px; border-radius: 12px 2px 12px 12px; max-width: 80%; }
+    .msg .a { display: flex; }
+    .msg .a .bubble { background: #fff; border-radius: 2px 12px 12px 12px; padding: 10px 12px; max-width: 92%; box-shadow: 0 1px 4px rgba(0,0,0,.06); white-space: pre-wrap; line-height: 1.7; }
+    .cite { display: inline-block; margin: 0 2px; padding: 0 5px; border-radius: 8px; background: #eef4f2; color: #1f6f63; font-size: 12px; cursor: pointer; font-weight: 600; }
+    .cite:hover { background: #d9e9e4; }
+    .refs { margin-top: 8px; }
+    .ref-chip { display: inline-block; margin: 3px 6px 3px 0; padding: 4px 8px; background: #fff; border: 1px solid #d9e9e4; border-radius: 12px; font-size: 12px; color: #1f6f63; cursor: pointer; }
+    .ref-chip.cited { background: #1f6f63; color: #fff; border-color: #1f6f63; }
+    .input-bar { position: fixed; left: 0; right: 0; bottom: 56px; display: flex; gap: 8px; padding: 10px 12px; background: #fff; border-top: 1px solid #eee; }
+    /* 文档 */
+    .card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .doc-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #f2f2f2; }
+    .doc-row:last-child { border-bottom: none; }
+    .doc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .muted { color: #999; font-size: 12px; }
+    /* 评估 */
+    .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .metric { background: #fff; border-radius: 10px; padding: 10px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+    .metric .v { font-size: 22px; font-weight: 700; color: #1f6f63; }
+    .metric .k { font-size: 12px; color: #888; }
+    .detail-panel {
+      position: fixed; left: 10px; right: 10px; bottom: 60px; max-height: 45%;
+      overflow-y: auto; background: #fff; border-radius: 12px; padding: 14px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18); z-index: 100; display: none;
+    }
+    .detail-panel.show { display: block; }
+    .detail-panel .close { float: right; cursor: pointer; color: #999; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="rag-header">
+    <div class="back" @click="goBack"><i class="el-icon-arrow-left"></i></div>
+    <div class="title">校园知识库</div>
+  </div>
+
+  <div class="kb-bar">
+    <el-select class="kb-select" size="small" v-model="kbId" placeholder="选择知识库" @change="onKbChange">
+      <el-option v-for="kb in kbs" :key="kb.id" :label="kb.name" :value="kb.id"></el-option>
+    </el-select>
+    <el-button size="small" type="success" @click="createKb">新建</el-button>
+  </div>
+
+  <div class="rag-body">
+    <el-tabs v-model="activeTab" stretch style="flex:1;display:flex;flex-direction:column;">
+      <!-- 问答 -->
+      <el-tab-pane label="问答" name="chat">
+        <div class="pane" id="chat-pane">
+          <div v-if="messages.length === 0" class="muted" style="text-align:center;padding:30px 0;">
+            上传校园资料后，输入问题即可获得带引用溯源的回答
+          </div>
+          <div class="msg" v-for="(m, i) in messages" :key="i">
+            <div class="q" v-if="m.role === 'user'"><span>{{ m.text }}</span></div>
+            <div class="a" v-else>
+              <div class="bubble">
+                <div v-html="renderAnswer(m.text)" @click="onAnswerClick($event)"></div>
+                <div class="refs" v-if="m.refs && m.refs.length">
+                  <span class="ref-chip" v-for="(r, ri) in m.refs" :key="ri"
+                        :class="{cited: r.cited}" @click="showRef(r)">
+                    [{{ ri }}] {{ r.docName || '资料' }}<template v-if="r.headings && r.headings.length"> · {{ r.headings.join(' > ') }}</template>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="input-bar">
+          <el-input size="small" v-model="question" placeholder="就校园服务提问，例如：食堂几点开门？"
+                    @keyup.enter.native="ask"></el-input>
+          <el-button size="small" type="success" :loading="asking" @click="ask">发送</el-button>
+        </div>
+      </el-tab-pane>
+
+      <!-- 文档 -->
+      <el-tab-pane label="文档" name="docs">
+        <div class="pane">
+          <div class="card">
+            <div style="margin-bottom:8px;font-weight:600;">上传资料</div>
+            <input type="file" ref="file" @change="onFile" style="font-size:13px;">
+            <div style="margin-top:8px;">
+              切分方式：
+              <el-select size="mini" v-model="chunkMethod" style="width:110px;">
+                <el-option label="通用(naive)" value="naive"></el-option>
+                <el-option label="问答对(qa)" value="qa"></el-option>
+                <el-option label="表格(table)" value="table"></el-option>
+                <el-option label="简历(resume)" value="resume"></el-option>
+                <el-option label="整篇(one)" value="one"></el-option>
+              </el-select>
+            </div>
+            <div class="muted" style="margin-top:6px;">支持 txt / md / csv / json / html / docx / xlsx / pptx / pdf</div>
+            <el-button size="small" type="success" style="margin-top:10px;" :loading="uploading" @click="upload">上传并入库</el-button>
+          </div>
+          <div class="card">
+            <div style="margin-bottom:4px;font-weight:600;">已上传文档</div>
+            <div v-if="docs.length === 0" class="muted">暂无文档</div>
+            <div class="doc-row" v-for="d in docs" :key="d.id">
+              <div class="doc-name">
+                {{ d.name }}
+                <div class="muted">
+                  状态：{{ statusText(d.status) }}
+                  <template v-if="d.chunkCount"> · {{ d.chunkCount }} 切片</template>
+                  <template v-if="d.error"> · {{ d.error }}</template>
+                </div>
+              </div>
+              <el-tag v-if="d.status === 'done'" size="mini" type="success">完成</el-tag>
+              <el-tag v-else-if="d.status === 'failed'" size="mini" type="danger">失败</el-tag>
+              <el-tag v-else size="mini">处理中</el-tag>
+              <el-button size="mini" type="danger" plain @click="removeDoc(d)">删除</el-button>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <!-- 评估 -->
+      <el-tab-pane label="评估" name="eval">
+        <div class="pane">
+          <div class="card">
+            <div style="font-weight:600;margin-bottom:6px;">RAGAS 评估（自动检索+生成）</div>
+            <div class="muted" style="margin-bottom:6px;">每行一条：「问题|标准答案」（标准答案可省略）。运行后将自动走检索+大模型生成并计算指标。</div>
+            <el-input type="textarea" :rows="4" v-model="evalText"
+                      placeholder="食堂几点开门？|食堂每天 7:00 到 21:00 开放"></el-input>
+            <el-button size="small" type="success" style="margin-top:10px;" :loading="evaluating" @click="runEval">运行评估</el-button>
+          </div>
+          <div v-if="evalMetrics" class="metric-grid">
+            <div class="metric"><div class="v">{{ evalMetrics.faithfulness }}</div><div class="k">忠实度 faithfulness</div></div>
+            <div class="metric"><div class="v">{{ evalMetrics.answer_relevancy }}</div><div class="k">答案相关性</div></div>
+            <div class="metric"><div class="v">{{ evalMetrics.context_precision }}</div><div class="k">上下文精度</div></div>
+            <div class="metric"><div class="v">{{ evalMetrics.context_recall }}</div><div class="k">上下文召回</div></div>
+            <div class="metric"><div class="v">{{ evalMetrics.citation_accuracy }}</div><div class="k">引用准确率（自定义）</div></div>
+          </div>
+          <div class="card" v-if="evalCases.length" style="margin-top:10px;">
+            <div style="font-weight:600;margin-bottom:6px;">逐条结果</div>
+            <div class="doc-row" v-for="(c, i) in evalCases" :key="i">
+              <div class="doc-name">
+                {{ c.question }}
+                <div class="muted">忠实度 {{ c.metrics.faithfulness }} · 引用准确率 {{ c.metrics.citation_accuracy }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+  </div>
+
+  <!-- 引用详情 -->
+  <div class="detail-panel" :class="{show: refDetail}" @click.stop>
+    <span class="close" @click="refDetail = null">✕</span>
+    <div v-if="refDetail">
+      <div style="font-weight:600;margin-bottom:6px;">
+        {{ refDetail.docName || '资料' }}
+        <span class="muted" v-if="refDetail.headings && refDetail.headings.length"> · {{ refDetail.headings.join(' > ') }}</span>
+      </div>
+      <div style="line-height:1.7;font-size:14px;white-space:pre-wrap;">{{ refDetail.text }}</div>
+      <div class="muted" style="margin-top:6px;">相似度 {{ (refDetail.score || 0).toFixed(3) }} · 切片 #{{ refDetail.index }}</div>
+    </div>
+  </div>
+
+  <foot-bar :active-btn="5"></foot-bar>
+</div>
+<script src="./js/vue.js"></script>
+<script src="./js/axios.min.js"></script>
+<script src="./js/element.js"></script>
+<script src="./js/common.js?v=campus20260505c"></script>
+<script src="./js/footer.js?v=campus20260505c"></script>
+<script>
+  const app = new Vue({
+    el: "#app",
+    data: {
+      kbs: [],
+      kbId: null,
+      activeTab: "chat",
+      // 问答
+      question: "",
+      asking: false,
+      messages: [],
+      refDetail: null,
+      // 文档
+      chunkMethod: "naive",
+      uploading: false,
+      docs: [],
+      docTimer: null,
+      // 评估
+      evalText: "",
+      evaluating: false,
+      evalMetrics: null,
+      evalCases: [],
+    },
+    created() {
+      this.loadKbs();
+    },
+    methods: {
+      goBack() { history.back(); },
+      loadKbs() {
+        axios.get("/rag/kb/list")
+          .then(({data}) => {
+            this.kbs = data || [];
+            const saved = Number(localStorage.getItem("ragKbId"));
+            if (saved && this.kbs.some(k => k.id === saved)) {
+              this.kbId = saved;
+            } else if (this.kbs.length) {
+              this.kbId = this.kbs[0].id;
+            }
+            if (this.kbId) {
+              localStorage.setItem("ragKbId", this.kbId);
+              this.loadDocs();
+            }
+          })
+          .catch(err => this.$message.error(err));
+      },
+      onKbChange() {
+        localStorage.setItem("ragKbId", this.kbId);
+        this.messages = [];
+        this.evalMetrics = null;
+        this.evalCases = [];
+        this.loadDocs();
+      },
+      createKb() {
+        this.$prompt("输入知识库名称", "新建知识库", {
+          confirmButtonText: "创建", cancelButtonText: "取消", inputValue: "",
+        }).then(({value}) => {
+          const name = (value || "").trim();
+          if (!name) return;
+          axios.post("/rag/kb", { name })
+            .then(({data}) => {
+              this.$message.success("知识库已创建");
+              this.kbId = data.id;
+              this.loadKbs();
+            })
+            .catch(err => this.$message.error(err));
+        }).catch(() => {});
+      },
+      // ===== 问答 =====
+      ask() {
+        if (!this.kbId) { this.$message.warning("请先创建/选择知识库"); return; }
+        const q = (this.question || "").trim();
+        if (!q) return;
+        this.messages.push({ role: "user", text: q });
+        this.question = "";
+        this.asking = true;
+        this.scrollChat();
+        axios.post("/rag/chat", { kbId: this.kbId, question: q })
+          .then(({data}) => {
+            this.messages.push({ role: "assistant", text: data.answer, refs: data.references || [] });
+            this.scrollChat();
+          })
+          .catch(err => {
+            this.messages.push({ role: "assistant", text: "⚠️ " + err, refs: [] });
+            this.scrollChat();
+          })
+          .finally(() => { this.asking = false; });
+      },
+      scrollChat() {
+        this.$nextTick(() => {
+          const el = document.getElementById("chat-pane");
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      },
+      // 渲染引用标记 [ID:n] 为可点击角标
+      renderAnswer(text) {
+        const esc = (text || "")
+          .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return esc.replace(/\[ID:(\d+)\]/g, '<span class="cite" data-id="$1">[$1]</span>');
+      },
+      onAnswerClick(e) {
+        const id = e.target && e.target.getAttribute && e.target.getAttribute("data-id");
+        if (id !== null && id !== undefined && e.target.classList.contains("cite")) {
+          const msg = this.messages[this.messages.length - 1];
+          const ref = (msg.refs || [])[Number(id)];
+          if (ref) this.showRef(ref);
+        }
+      },
+      showRef(ref) { this.refDetail = ref; },
+      // ===== 文档 =====
+      onFile() {},
+      upload() {
+        if (!this.kbId) { this.$message.warning("请先创建/选择知识库"); return; }
+        const f = this.$refs.file.files[0];
+        if (!f) { this.$message.warning("请选择文件"); return; }
+        const fd = new FormData();
+        fd.append("kbId", this.kbId);
+        fd.append("chunkMethod", this.chunkMethod);
+        fd.append("file", f);
+        this.uploading = true;
+        axios.post("/rag/doc/upload", fd)
+          .then(() => {
+            this.$message.success("已提交入库，稍后刷新状态");
+            this.$refs.file.value = "";
+            this.loadDocs();
+          })
+          .catch(err => this.$message.error(err))
+          .finally(() => { this.uploading = false; });
+      },
+      loadDocs() {
+        if (!this.kbId) return;
+        axios.get("/rag/doc/list", { params: { kbId: this.kbId } })
+          .then(({data}) => {
+            this.docs = data || [];
+            // 有处理中的文档时轮询刷新
+            const pending = this.docs.some(d => d.status === "pending" || d.status === "running");
+            if (pending && !this.docTimer) {
+              this.docTimer = setInterval(() => this.loadDocs(), 2000);
+            }
+            if (!pending && this.docTimer) {
+              clearInterval(this.docTimer);
+              this.docTimer = null;
+            }
+          })
+          .catch(err => this.$message.error(err));
+      },
+      statusText(s) {
+        return ({ pending: "排队中", running: "处理中", done: "已完成", failed: "失败" })[s] || s;
+      },
+      removeDoc(d) {
+        this.$confirm("确认删除该文档及其切片？", "提示", { type: "warning" })
+          .then(() => axios.delete("/rag/doc/" + d.id))
+          .then(() => { this.$message.success("已删除"); this.loadDocs(); })
+          .catch(() => {});
+      },
+      // ===== 评估 =====
+      runEval() {
+        if (!this.kbId) { this.$message.warning("请先创建/选择知识库"); return; }
+        const lines = (this.evalText || "").split("\n").map(l => l.trim()).filter(Boolean);
+        if (!lines.length) { this.$message.warning("请输入评估样本"); return; }
+        const cases = lines.map(l => {
+          const [q, gt] = l.split("|");
+          return { question: (q || "").trim(), groundTruth: (gt || "").trim() };
+        }).filter(c => c.question);
+        if (!cases.length) { this.$message.warning("格式应为：问题|标准答案"); return; }
+        this.evaluating = true;
+        axios.post("/rag/eval/run", {
+          kbId: this.kbId, name: "ui-eval", usePipeline: true, cases,
+        })
+          .then(({data}) => {
+            this.evalMetrics = data.metrics;
+            this.$message.success("评估完成");
+            return axios.get("/rag/eval/" + data.runId);
+          })
+          .then(({data}) => { this.evalCases = data.cases || []; })
+          .catch(err => this.$message.error(err))
+          .finally(() => { this.evaluating = false; });
+      },
+    },
+  })
+</script>
+</body>
+</html>

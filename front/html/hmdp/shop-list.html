@@ -19,7 +19,7 @@
   <div class="header">
     <div class="header-back-btn" @click="goBack"><i class="el-icon-arrow-left"></i></div>
     <div class="header-title">{{displayTypeName}}</div>
-    <div class="header-search">
+    <div class="header-search" @click="goSearch">
       <i class="el-icon-search"></i>
     </div>
   </div>
@@ -47,8 +47,11 @@
     </div>
   </div>
   <div class="shop-list" @scroll="onScroll">
+    <div v-if="loaded && shops.length === 0" style="text-align:center;color:#999;padding:40px 0;">
+      暂无相关服务点
+    </div>
     <div class="shop-box" v-for="s in shops" :key="s.id" @click="toDetail(s.id)">
-      <div class="shop-img"><img :src="s.images" alt=""></div>
+      <div class="shop-img"><img :src="s.images" alt="" onerror="this.onerror=null;this.src='/imgs/icons/default-icon.png'"></div>
       <div class="shop-info">
         <div class="shop-title shop-item">{{s.displayName || s.name}}</div>
         <div class="shop-rate shop-item" >
@@ -88,6 +91,9 @@
       shops: [], // 商店列表
       typeName: "",
       displayTypeName: "",
+      searchKeyword: "", // 搜索关键字
+      hasMore: true,     // 是否还有下一页
+      loaded: false,     // 是否已加载过
       params:{
         typeId: 0,
         current: 1,
@@ -98,7 +104,12 @@
       // 获取参数
       this.params.typeId = util.getUrlParam("type");
       this.typeName = util.getUrlParam("name");
-      this.displayTypeName = campusTheme.serviceTypeMap[this.typeName] || this.typeName || "校园服务";
+      this.searchKeyword = util.getUrlParam("search");
+      if (this.searchKeyword) {
+        this.displayTypeName = "搜索结果：" + this.searchKeyword;
+      } else {
+        this.displayTypeName = campusTheme.serviceTypeMap[this.typeName] || this.typeName || "校园服务";
+      }
       // 查询类型
       this.queryTypes();
       // 查询商店
@@ -116,29 +127,50 @@
           })
       },
       queryShops() {
-        axios.get("/shop/of/type", {
-            params: this.params
-          })
+        const url = this.searchKeyword ? "/shop/of/name" : "/shop/of/type";
+        const params = this.searchKeyword
+          ? { name: this.searchKeyword, current: this.params.current }
+          : this.params;
+        axios.get(url, { params })
           .then(({data}) => {
+            this.loaded = true;
             if (!data) {
+              this.hasMore = false;
               return
             }
             data.forEach(s => {
-              s.images = s.images.split(',')[0];
+              s.images = (s.images || '').split(',')[0];
               campusTheme.decorateShop(s);
             });
             this.shops = this.shops.concat(data);
+            // 服务端每页 5 条：不足一页说明已到底
+            this.hasMore = data.length >= 5;
           })
           .catch(err => {
             console.log(err);
             this.$message.error(err)
           })
       },
+      // 头部搜索：输入关键字后跳转
+      goSearch() {
+        this.$prompt('输入服务点名称关键字', '搜索', {
+          confirmButtonText: '搜索',
+          cancelButtonText: '取消',
+        }).then(({value}) => {
+          const kw = (value || '').trim();
+          if (!kw) return;
+          location.href = campusTheme.page("/shop-list.html?search=" + encodeURIComponent(kw));
+        }).catch(() => {});
+      },
       handleCommand(t) {
         location.href = campusTheme.page("/shop-list.html?type="+t.id+"&name="+t.name);
       },
       sortAndQuery(sortBy) {
+        // 排序：重置列表与页码，避免重复叠加
+        this.shops = [];
+        this.params.current = 1;
         this.params.sortBy = sortBy;
+        this.hasMore = true;
         this.queryShops();
       },
       goBack() {
@@ -151,11 +183,10 @@
         let scrollTop = e.target.scrollTop;
         let offsetHeight = e.target.offsetHeight;
         let scrollHeight = e.target.scrollHeight;
-        if(scrollTop + offsetHeight + 1 > scrollHeight && !this.isReachBottom){
+        if(scrollTop + offsetHeight + 1 > scrollHeight && !this.isReachBottom && this.hasMore){
           this.isReachBottom = true
-          console.log("触底")
           this.params.current++
-          this.queryShops(this.params.current, 5);
+          this.queryShops();
         }else{
           this.isReachBottom = false
         }

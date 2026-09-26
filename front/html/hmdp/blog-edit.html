@@ -30,7 +30,7 @@
     </div>
     <div class="pic-list">
       <div class="pic-box" v-for="(f,i) in fileList" :key="i">
-        <img :src="f" alt="">
+        <img :src="f" alt="" onerror="this.onerror=null;this.src='/imgs/icons/default-icon.png'">
         <i class="el-icon-close" @click="deletePic(i)"></i>
       </div>
     </div>
@@ -106,6 +106,18 @@
         this.showDialog = false;
       },
       submitBlog() {
+        if (!this.selectedShop || !this.selectedShop.id) {
+          this.$message.warning("请先选择关联的校园服务点");
+          return;
+        }
+        if (!this.params.title || !this.params.title.trim()) {
+          this.$message.warning("请填写动态标题");
+          return;
+        }
+        if (!this.params.content || !this.params.content.trim()) {
+          this.$message.warning("请填写动态内容");
+          return;
+        }
         let {...data} = this.params;
         data.images = this.fileList.join(",");
         data.shopId = this.selectedShop.id;
@@ -129,7 +141,9 @@
           .catch(this.$message.error);
       },
       deletePic(i) {
-        axios.get("/upload/blog/delete?name=" + this.fileList[i])
+        // 展示路径带 /imgs 前缀，删除接口需要原始相对路径
+        const name = this.fileList[i].replace(/^\/imgs/, "");
+        axios.get("/upload/blog/delete?name=" + encodeURIComponent(name))
           .then(() => this.fileList.splice(i, 1))
           .catch(this.$message.error)
       },

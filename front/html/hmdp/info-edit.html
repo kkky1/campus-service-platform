@@ -8,90 +8,87 @@
   <link rel="stylesheet" href="./css/element.css">
   <link href="./css/main.css?v=campus20260505c" rel="stylesheet">
   <link href="./css/info.css?v=campus20260505c" rel="stylesheet">
-
-  <style type="text/css">
-
-  </style>
 </head>
 <body>
 <div id="app">
   <div class="header">
-    <div class="header-back-btn" @click="goBack" ><i class="el-icon-arrow-left"></i></div>
+    <div class="header-back-btn" @click="goBack"><i class="el-icon-arrow-left"></i></div>
     <div class="header-title">校园资料编辑&nbsp;&nbsp;&nbsp;</div>
   </div>
   <div class="edit-container">
     <div class="info-box">
-      <div class="info-item">
+      <div class="info-item" @click="editField('icon')">
         <div class="info-label">头像</div>
         <div class="info-btn">
-          <img width="35" :src="user.icon || '/imgs/icons/default-icon.png'" alt="">
+          <img width="35" :src="form.icon || '/imgs/icons/default-icon.png'" alt="">
           <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
       <div class="divider"></div>
-      <div class="info-item">
+      <div class="info-item" @click="editField('nickName')">
         <div class="info-label">昵称</div>
         <div class="info-btn">
-          <div>{{user.nickName}}</div>
-          <div>
-            <i class="el-icon-arrow-right"></i>
-          </div>
+          <div>{{form.nickName || '点击设置'}}</div>
+          <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
       <div class="divider"></div>
-      <div class="info-item">
+      <div class="info-item" @click="editField('introduce')">
         <div class="info-label">个人介绍</div>
         <div class="info-btn">
-          <div style="overflow: hidden; width: 150px;text-align: right">{{info.introduce || '介绍一下你的校园标签'}}</div>
-          <div>
-            <i class="el-icon-arrow-right"></i>
-          </div>
+          <div style="overflow: hidden; width: 150px;text-align: right">{{form.introduce || '介绍一下你的校园标签'}}</div>
+          <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
     </div>
     <div class="info-box">
-      <div class="info-item">
+      <div class="info-item" @click="editField('gender')">
         <div class="info-label">性别</div>
         <div class="info-btn">
-          <div>{{info.gender || '选择'}}</div>
+          <div>{{form.gender || '选择'}}</div>
           <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
       <div class="divider"></div>
-      <div class="info-item">
+      <div class="info-item" @click="editField('city')">
         <div class="info-label">校区</div>
         <div class="info-btn">
-          <div>{{info.city || '选择'}}</div>
+          <div>{{form.city || '选择'}}</div>
           <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
       <div class="divider"></div>
-      <div class="info-item">
+      <div class="info-item" @click="editField('birthday')">
         <div class="info-label">生日</div>
         <div class="info-btn">
-          <div>{{info.birthday || '添加'}}</div>
+          <div>{{form.birthday || '添加'}}</div>
           <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
     </div>
 
     <div class="info-box">
-      <div class="info-item">
-        <div class="info-label">签到积分</div>
+      <div class="info-item" @click="signIn">
+        <div class="info-label">每日签到</div>
         <div class="info-btn">
-          <div>查看积分明细</div>
+          <div>{{ signCount > 0 ? '已连续 ' + signCount + ' 天' : '签到 +5 积分' }}</div>
           <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
       <div class="divider"></div>
-      <div class="info-item">
-        <div class="info-label">学生等级</div>
+      <div class="info-item" @click="toRag">
+        <div class="info-label">校园知识库</div>
         <div class="info-btn">
-          <div><a href="javascript:void(0)">完成学生认证解锁权益</a></div>
+          <div>文档问答 / 引用溯源</div>
           <div><i class="el-icon-arrow-right"></i></div>
         </div>
       </div>
     </div>
+
+    <button class="save-btn" @click="save"
+            style="width:calc(100% - 30px);margin:15px;padding:12px;border:none;border-radius:8px;background:#1f6f63;color:#fff;font-size:15px;">
+      保存资料
+    </button>
   </div>
   <foot-bar :active-btn="4"></foot-bar>
 </div>
@@ -102,34 +99,127 @@
 <script src="./js/common.js?v=campus20260505c"></script>
 <script src="./js/footer.js?v=campus20260505c"></script>
 <script>
-
   const app = new Vue({
     el: "#app",
     data: {
       user: "",
-      info: {},
+      signCount: 0,
+      form: {
+        nickName: "",
+        icon: "",
+        introduce: "",
+        gender: "",     // 显示值：男/女
+        city: "",
+        birthday: "",   // YYYY-MM-DD
+      },
     },
     created() {
       this.checkLogin();
+      this.querySignCount();
     },
     methods: {
       checkLogin() {
-        // 查询用户信息
         axios.get("/user/me")
         .then(({data}) => {
           this.user = data;
-          this.info = JSON.parse(sessionStorage.getItem("userInfo")) || {}
+          this.form.nickName = data.nickName || "";
+          this.form.icon = data.icon || "";
+          // 用户详情
+          return axios.get("/user/info/" + data.id).then(({data: info}) => {
+            if (info) {
+              this.form.introduce = info.introduce || "";
+              this.form.city = info.city || "";
+              this.form.birthday = info.birthday || "";
+              if (info.gender === true) this.form.gender = "男";
+              else if (info.gender === false) this.form.gender = "女";
+            }
+          });
         })
         .catch(err => {
           this.$message.error(err);
           setTimeout(() => location.href = "login.html", 1000)
         })
       },
-      goBack(){
+      // 点击字段编辑（弹窗输入）
+      editField(field) {
+        const configs = {
+          icon:      { title: "头像链接", placeholder: "例如 /imgs/icons/default-icon.png 或 https://..." },
+          nickName:  { title: "昵称",     placeholder: "输入新的昵称" },
+          introduce: { title: "个人介绍", placeholder: "介绍一下自己的校园标签", type: "textarea" },
+          gender:    { title: "性别",     placeholder: "输入：男 或 女" },
+          city:      { title: "校区",     placeholder: "例如：南区 / 北区 / 明德校区" },
+          birthday:  { title: "生日",     placeholder: "格式：YYYY-MM-DD，例如 2004-09-01" },
+        };
+        const cfg = configs[field];
+        this.$prompt(cfg.placeholder, cfg.title, {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          inputType: cfg.type || "text",
+          inputValue: this.form[field] || "",
+        }).then(({value}) => {
+          const v = (value || "").trim();
+          if (field === "gender") {
+            if (v !== "男" && v !== "女") {
+              this.$message.warning("性别只能填 男 或 女");
+              return;
+            }
+          }
+          if (field === "birthday" && v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            this.$message.warning("生日格式应为 YYYY-MM-DD");
+            return;
+          }
+          this.form[field] = v;
+        }).catch(() => {});
+      },
+      // 保存：昵称/头像 + 用户详情
+      save() {
+        if (!this.form.nickName) {
+          this.$message.warning("昵称不能为空");
+          return;
+        }
+        const profileReq = axios.put("/user/profile", {
+          nickName: this.form.nickName,
+          icon: this.form.icon || "",
+        });
+        const infoBody = {
+          introduce: this.form.introduce,
+          city: this.form.city,
+          birthday: this.form.birthday,
+        };
+        if (this.form.gender === "男") infoBody.gender = true;
+        if (this.form.gender === "女") infoBody.gender = false;
+        const infoReq = axios.put("/user/info", infoBody);
+        Promise.all([profileReq, infoReq])
+          .then(() => {
+            this.$message.success("资料已保存");
+            sessionStorage.setItem("userInfo", JSON.stringify({
+              introduce: this.form.introduce, city: this.form.city,
+              birthday: this.form.birthday,
+            }));
+            setTimeout(() => location.href = campusTheme.page("/info.html"), 600);
+          })
+          .catch(err => this.$message.error(err));
+      },
+      signIn() {
+        axios.post("/user/sign")
+          .then(() => {
+            this.$message.success("签到成功，积分 +5");
+            this.querySignCount();
+          })
+          .catch(err => this.$message.error(err));
+      },
+      querySignCount() {
+        axios.get("/user/sign/count")
+          .then(({data}) => { this.signCount = data || 0; })
+          .catch(() => {});
+      },
+      toRag() {
+        location.href = campusTheme.page("/rag.html");
+      },
+      goBack() {
         history.back();
       }
     },
-
   })
 </script>
 </body>

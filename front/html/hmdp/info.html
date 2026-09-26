@@ -51,15 +51,23 @@
       退出登录
     </div>
   </div>
-  <div class="introduce">
-    <span v-if="info.introduce"></span>
+  <div class="introduce" @click="toEdit" style="cursor:pointer">
+    <span v-if="info.introduce">{{info.introduce}}</span>
     <span v-else>添加校园简介，让同学更好地认识你 <i class="el-icon-edit"></i></span>
+  </div>
+  <div class="info-actions" style="display:flex;gap:10px;padding:10px 15px;">
+    <button @click="signIn" style="flex:1;border:none;border-radius:8px;padding:10px;background:#1f6f63;color:#fff;">
+      {{ signCount > 0 ? '已连续签到 ' + signCount + ' 天' : '每日签到 +5 积分' }}
+    </button>
+    <button @click="toRag" style="flex:1;border:none;border-radius:8px;padding:10px;background:#eef4f2;color:#1f6f63;font-weight:600;">
+      <i class="el-icon-reading"></i> 校园知识库
+    </button>
   </div>
   <div class="content">
     <el-tabs v-model="activeName" @tab-click="handleClick">
       <el-tab-pane label="动态" name="1">
         <div v-for="b in blogs" :key="b.id" class="blog-item">
-          <div class="blog-img"><img :src="b.images.split(',')[0]" alt=""></div>
+          <div class="blog-img"><img :src="b.images.split(',')[0]" alt="" onerror="this.onerror=null;this.src='/imgs/icons/default-icon.png'"></div>
           <div class="blog-info">
             <div class="blog-title">{{b.displayTitle || b.title}}</div>
             <div class="blog-liked"><img src="/imgs/thumbup.png" alt=""> {{b.liked}}</div>
@@ -104,6 +112,7 @@
   const app = new Vue({
     el: "#app",
     data: {
+      signCount: 0,
       user: "",
       activeName: "1",
       info: {},
@@ -120,6 +129,22 @@
       this.queryUser();
     },
     methods: {
+      signIn() {
+        axios.post("/user/sign")
+          .then(() => {
+            this.$message.success("签到成功，积分 +5");
+            this.querySignCount();
+          })
+          .catch(err => this.$message.error(err));
+      },
+      querySignCount() {
+        axios.get("/user/sign/count")
+          .then(({data}) => { this.signCount = data || 0; })
+          .catch(() => {});
+      },
+      toRag() {
+        location.href = campusTheme.page("/rag.html");
+      },
       load() {
         this.count += 2;
       },
@@ -159,6 +184,7 @@
             this.user = data;
             // 查询用户详情
             this.queryUserInfo();
+            this.querySignCount();
             // 查询用户动态
             this.queryBlogs();
           })
