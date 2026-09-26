@@ -3,10 +3,10 @@ services:
     image: mysql:8.0
     container_name: hmdp-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置}
       MYSQL_DATABASE: hmdp
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"   # 仅本机可访问
     volumes:
       - hmdp-mysql-data:/var/lib/mysql
     command:
@@ -24,12 +24,15 @@ services:
   redis:
     image: redis:7
     container_name: hmdp-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?请在 .env 中设置}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"   # 仅本机可访问（已启用密码）
     volumes:
       - hmdp-redis-data:/data
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?请在 .env 中设置}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -38,7 +41,7 @@ services:
     image: bitnami/kafka:3.7
     container_name: hmdp-kafka
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"   # 仅本机可访问
     environment:
       - KAFKA_CFG_NODE_ID=0
       - KAFKA_CFG_PROCESS_ROLES=controller,broker
@@ -63,10 +66,11 @@ services:
       dockerfile: Dockerfile.prebuilt
     container_name: hmdp-backend
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"   # 仅本机可访问（外网经 nginx 8080）
     environment:
-      MYSQL_DSN: root:123456@tcp(mysql:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local
+      MYSQL_DSN: campus:${MYSQL_APP_PASSWORD}@tcp(mysql:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local
       REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       KAFKA_BROKERS: kafka:9092
       UPLOAD_DIR: /data/uploads
     env_file:
@@ -100,6 +104,10 @@ services:
 
 volumes:
   hmdp-mysql-data:
+    name: hmdp-mysql-data
   hmdp-redis-data:
+    name: hmdp-redis-data
   hmdp-kafka-data:
+    name: hmdp-kafka-data
   hmdp-upload-data:
+    name: hmdp-upload-data

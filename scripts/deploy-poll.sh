@@ -6,6 +6,11 @@ set -e
 REPO=/root/ykwork/campus-service-platform
 cd "$REPO"
 
+# 读取部署密钥（.env 不入库）
+if [ -f .env ]; then
+    set -a; . ./.env; set +a
+fi
+
 # 1. 工作区有未提交改动 → 跳过，保护开发中的工作
 if [ -n "$(git status --porcelain)" ]; then
     echo "[deploy] 工作区有本地改动，跳过本次部署"
@@ -32,9 +37,9 @@ git merge --ff-only origin/main -q
 echo "[deploy] 已快进到 $(git rev-parse --short HEAD)"
 
 # 5. 首次导入数据库（tb_user 表不存在时）
-if ! docker exec hmdp-mysql mysql -uroot -p123456 hmdp -N -e 'SHOW TABLES LIKE "tb_user"' 2>/dev/null | grep -q tb_user; then
+if ! docker exec hmdp-mysql mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" hmdp -N -e 'SHOW TABLES LIKE "tb_user"' 2>/dev/null | grep -q tb_user; then
     echo "[deploy] 首次导入数据库 db/hmdp.sql"
-    (echo "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';"; cat db/hmdp.sql) | docker exec -i hmdp-mysql mysql -uroot -p123456 hmdp
+    (echo "SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';"; cat db/hmdp.sql) | docker exec -i hmdp-mysql mysql -uroot -p"${MYSQL_ROOT_PASSWORD}" hmdp
 fi
 
 # 6a. 修正上传卷属主（容器以 uid 10001 运行）

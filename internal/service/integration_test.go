@@ -23,8 +23,15 @@ import (
 
 const (
 	itRedisAddr = "127.0.0.1:6379"
-	itMySQLDSN  = "root:123456@tcp(127.0.0.1:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local"
 )
+
+// itMySQLDSN 集成测试 DSN：优先读取 TEST_MYSQL_DSN（避免硬编码密码）。
+func itMySQLDSN() string {
+	if v := os.Getenv("TEST_MYSQL_DSN"); v != "" {
+		return v
+	}
+	return "root:本地密码@tcp(127.0.0.1:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local"
+}
 
 func itRedis(t *testing.T) *redis.Client {
 	t.Helper()
@@ -40,7 +47,7 @@ func itRedis(t *testing.T) *redis.Client {
 
 func itDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(mysql.Open(itMySQLDSN), &gorm.Config{
+	db, err := gorm.Open(mysql.Open(itMySQLDSN()), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
@@ -262,7 +269,7 @@ func TestShopGeoIntegration(t *testing.T) {
 	}
 	x, y := 120.0, 30.0
 	// 第一页 5 条（1005 超远被 5000m 排除）
-	res := app.QueryShopByType(ctx, 1, 1, &x, &y)
+	res := app.QueryShopByType(ctx, 1, 1, &x, &y, "")
 	if !res.Success {
 		t.Fatalf("GEO 查询失败: %v", res)
 	}
@@ -281,13 +288,13 @@ func TestShopGeoIntegration(t *testing.T) {
 		}
 	}
 	// 第二页：半径内共 5 条，from=5 → size<=from → 空列表（对齐 Java list.size()<=from 语义）
-	res = app.QueryShopByType(ctx, 1, 2, &x, &y)
+	res = app.QueryShopByType(ctx, 1, 2, &x, &y, "")
 	shops = res.Data.([]repo.Shop)
 	if len(shops) != 0 {
 		t.Fatalf("第二页应为空（对齐原分页语义）: %v", shops)
 	}
 	// 无坐标 → DB 分页（页大小 5）
-	res = app.QueryShopByType(ctx, 1, 1, nil, nil)
+	res = app.QueryShopByType(ctx, 1, 1, nil, nil, "")
 	shops = res.Data.([]repo.Shop)
 	if len(shops) != 5 {
 		t.Fatalf("无坐标分页 = %d, want 5", len(shops))
