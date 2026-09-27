@@ -7,10 +7,12 @@ services:
     container_name: jenkins
     user: root
     restart: unless-stopped
+    mem_limit: 2g
     ports:
       - "127.0.0.1:8090:8080"   # 仅本机可访问（SSH 隧道）
     environment:
       JAVA_OPTS: >-
+        -Xmx512m -Xms256m
         -Djenkins.install.runSetupWizard=false
         -Dhudson.model.DownloadService.noSignatureCheck=true
       JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER:-admin}

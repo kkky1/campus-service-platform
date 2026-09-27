@@ -46,6 +46,7 @@ services:
     ports:
       - "127.0.0.1:9092:9092"   # 仅本机可访问
     environment:
+      - KAFKA_HEAP_OPTS=-Xmx384m -Xms256m
       - KAFKA_CFG_NODE_ID=0
       - KAFKA_CFG_PROCESS_ROLES=controller,broker
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093

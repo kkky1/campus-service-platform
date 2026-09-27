@@ -14,7 +14,7 @@ pipeline {
         GOPROXY     = "https://goproxy.cn,direct"
         GOMODCACHE  = "/root/go/pkg/mod"
         GOCACHE     = "/root/go/build-cache"
-        GOMAXPROCS  = "2"
+        GOMAXPROCS  = "1"
         COMPOSE     = "docker compose -p campus-service-platform -f docker-compose.local.yml"
     }
     stages {
@@ -39,9 +39,9 @@ pipeline {
                     export TEST_REDIS_ADDR="redis:6379"
                     export TEST_REDIS_PASSWORD="${REDIS_PASSWORD}"
                     # 限制并行编译（小内存机器防 OOM）
-                    go build -p 2 ./...
+                    go build -p 1 ./...
                     go vet ./...
-                    go test -p 2 ./...
+                    go test -p 1 ./...
                 '''
             }
         }
