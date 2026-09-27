@@ -14,6 +14,7 @@ pipeline {
         GOPROXY     = "https://goproxy.cn,direct"
         GOMODCACHE  = "/root/go/pkg/mod"
         GOCACHE     = "/root/go/build-cache"
+        GOMAXPROCS  = "2"
         COMPOSE     = "docker compose -p campus-service-platform -f docker-compose.local.yml"
     }
     stages {
@@ -32,13 +33,15 @@ pipeline {
         stage('构建与测试') {
             steps {
                 sh '''
+                    set +x   # 关闭回显，避免 .env 密钥进入构建日志
                     set -a; . ./.env; set +a
                     export TEST_MYSQL_DSN="campus:${MYSQL_APP_PASSWORD}@tcp(mysql:3306)/hmdp?charset=utf8mb4&parseTime=True&loc=Local"
                     export TEST_REDIS_ADDR="redis:6379"
                     export TEST_REDIS_PASSWORD="${REDIS_PASSWORD}"
-                    go build ./...
+                    # 限制并行编译（小内存机器防 OOM）
+                    go build -p 2 ./...
                     go vet ./...
-                    go test ./...
+                    go test -p 2 ./...
                 '''
             }
         }
@@ -50,6 +53,7 @@ pipeline {
         stage('部署') {
             steps {
                 sh '''
+                    set +x   # 关闭回显，避免 .env 密钥进入构建日志
                     set -a; . ./.env; set +a
                     # 上传卷属主（容器以 uid 10001 运行）
                     docker run --rm -v hmdp-upload-data:/data alpine:3.20 chown -R 10001:10001 /data 2>/dev/null || true

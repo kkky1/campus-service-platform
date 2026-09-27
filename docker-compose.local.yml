@@ -1,5 +1,6 @@
 services:
   mysql:
+    restart: unless-stopped
     image: mysql:8.0
     container_name: hmdp-mysql
     environment:
@@ -22,6 +23,7 @@ services:
       retries: 20
 
   redis:
+    restart: unless-stopped
     image: redis:7
     container_name: hmdp-redis
     environment:
@@ -38,6 +40,7 @@ services:
       retries: 20
 
   kafka:
+    restart: unless-stopped
     image: bitnami/kafka:3.7
     container_name: hmdp-kafka
     ports:
@@ -61,6 +64,7 @@ services:
       retries: 20
 
   backend:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.prebuilt
@@ -88,6 +92,7 @@ services:
         condition: service_healthy
 
   nginx:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.front

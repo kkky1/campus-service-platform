@@ -17,7 +17,6 @@ if (jenkins.getItem(name) == null) {
       <userRemoteConfigs>
         <hudson.plugins.git.UserRemoteConfig>
           <url>git@github.com:kkky1/campus-service-platform.git</url>
-          <credentialsId>github-deploy-key</credentialsId>
         </hudson.plugins.git.UserRemoteConfig>
       </userRemoteConfigs>
       <branches>
@@ -35,9 +34,9 @@ if (jenkins.getItem(name) == null) {
           <honorRefspec>false</honorRefspec>
         </hudson.plugins.git.extensions.impl.CloneOption>
       </extensions>
-    </hudson.plugins.git.GitSCM>
+    </scm>
     <scriptPath>Jenkinsfile</scriptPath>
-    <lightweight>true</lightweight>
+    <lightweight>false</lightweight>
   </definition>
   <triggers>
     <hudson.triggers.SCMTrigger>
