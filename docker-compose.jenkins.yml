@@ -1,4 +1,5 @@
-# Jenkins：自动化部署（替代原 systemd 定时拉取）
+name: jenkins
+# Jenkins：自动化部署（独立 compose 项目，避免与业务项目的 --remove-orphans 冲突）
 # 启动：docker compose -f docker-compose.jenkins.yml up -d
 # 访问：本机 127.0.0.1:8090（通过 SSH 隧道访问），管理员账号见服务器 .env
 services:
