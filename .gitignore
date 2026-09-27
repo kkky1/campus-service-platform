@@ -49,3 +49,6 @@ data/
 
 ### 环境变量（RAG 密钥等）
 .env
+
+### RAG 评估报告
+reports/

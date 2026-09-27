@@ -95,6 +95,11 @@ GitHub (main)                    服务器 (3.8G 小机器)
 | ④ 编译二进制 | `go build -o bin/campus-server ./cmd/server` | 供瘦镜像 `Dockerfile.prebuilt` 直接 COPY（避免容器内下载依赖） |
 | ⑤ 部署 | ①上传卷 chown ②首次检测 `tb_user` 不存在则导入 `db/hmdp.sql` ③`docker compose -p campus-service-platform up -d --build --remove-orphans` ④清理悬空镜像 | 接管既有容器（固定项目名）；compose 只重建变化的服务（日志可见 backend/nginx `Recreate`，mysql/redis/kafka `Running`） |
 | ⑥ 健康检查 | `curl http://backend:8081/shop-type/list`，最多 30 次 × 2 秒 | 部署后门禁；失败则构建红，并触发 post 打印 backend 日志 |
+| ⑦ RAG 评估（AI 随机数据） | 从知识库随机抽片段 → LLM 生成「问题+标准答案」→ 跑 `/rag/eval/run`（自动检索+生成）→ 输出报告与阈值判定 | 每次 CD 自动评测 RAG 效果；低于阈值构建失败 |
+
+> RAG 评估可调参数：`RAG_EVAL_COUNT`（样本数，默认 3）、`RAG_EVAL_KB_ID`（默认 10）、
+> `RAG_EVAL_ENFORCE=false`（只告警不失败）、`RAG_EVAL_MIN_*`（各指标阈值）。
+> 报告归档在构建产物 `reports/rag-eval.md`；本地可执行 `go run ./cmd/rageval` 手动评测。
 
 **部署阶段 Docker 具体发生了什么**：
 1. `Dockerfile.prebuilt` 基于 `alpine` COPY `bin/campus-server` 二进制 → backend 镜像秒级构建；

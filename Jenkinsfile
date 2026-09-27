@@ -84,6 +84,25 @@ pipeline {
                 '''
             }
         }
+        stage('RAG 评估（AI 随机数据）') {
+            steps {
+                sh '''
+                    set +x   # 不回显密钥
+                    set -a; . ./.env; set +a
+                    export RAG_BASE_URL="http://backend:8081"
+                    export RAG_EVAL_REPORT="reports/rag-eval.md"
+                    export RAG_EVAL_COUNT="${RAG_EVAL_COUNT:-3}"
+                    # 阈值（可用环境变量覆盖）：既能拦截真实退化，又避免随机波动误报
+                    export RAG_EVAL_MIN_FAITHFULNESS="${RAG_EVAL_MIN_FAITHFULNESS:-0.2}"
+                    export RAG_EVAL_MIN_RELEVANCY="${RAG_EVAL_MIN_RELEVANCY:-0.15}"
+                    export RAG_EVAL_MIN_RECALL="${RAG_EVAL_MIN_RECALL:-0.2}"
+                    export RAG_EVAL_MIN_CITATION="${RAG_EVAL_MIN_CITATION:-0.3}"
+                    mkdir -p reports
+                    go run ./cmd/rageval 2>&1 | tee reports/rag-eval.log
+                '''
+                archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+            }
+        }
     }
     post {
         failure {
