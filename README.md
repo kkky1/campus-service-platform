@@ -141,8 +141,9 @@ docker compose -f docker-compose.local.yml up -d --build
 
 ### 部署与访问
 
-- **拉取式 CD**：服务器 systemd `campus-deploy.timer` 每 2 分钟执行 `scripts/deploy-poll.sh`——
-  只允许 fast-forward，本地有未推送提交或未提交改动时自动跳过；有新提交则编译 → compose 重建 → 健康检查。
+- **自动化部署（Jenkins）**：GitHub 推送后由 Jenkins 每 2 分钟轮询，执行
+  检出 → 构建测试 → 编译 → docker compose 部署 → 健康检查；详见 `docs/jenkins-cd.md`。
+  （原 systemd 定时拉取已停用，`scripts/deploy-poll.sh` 保留为回退方案。）
 - **访问前端**：
   - 公网：在 VPS 服务商的 NAT 端口映射面板中，把某个公网端口映射到本机 `8080`（当前公网 80/8000 不是本机服务）。
   - 临时访问（无需映射）：`ssh -p 64540 -L 8080:127.0.0.1:8080 root@<服务器IP>`，然后打开 `http://localhost:8080`。
