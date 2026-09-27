@@ -87,6 +87,7 @@ func (Task) TableName() string { return "rag_task" }
 type ChatLog struct {
 	Id        *int64     `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
 	KbId      *int64     `gorm:"column:kb_id;index" json:"kbId,omitempty"`
+	SessionId *int64     `gorm:"column:session_id;index" json:"sessionId,omitempty"`
 	UserId    *int64     `gorm:"column:user_id;index" json:"userId,omitempty"`
 	Question  *string    `gorm:"column:question;type:text" json:"question,omitempty"`
 	Answer    *string    `gorm:"column:answer;type:text" json:"answer,omitempty"`
@@ -96,6 +97,19 @@ type ChatLog struct {
 }
 
 func (ChatLog) TableName() string { return "rag_chat_log" }
+
+// RagSession 问答会话（新会话彼此独立，历史可回看）。
+type RagSession struct {
+	Id           *int64     `gorm:"column:id;primaryKey;autoIncrement" json:"id,omitempty"`
+	KbId         *int64     `gorm:"column:kb_id;index" json:"kbId,omitempty"`
+	UserId       *int64     `gorm:"column:user_id;index" json:"userId,omitempty"`
+	Title        *string    `gorm:"column:title;size:128" json:"title,omitempty"`
+	MessageCount *int       `gorm:"column:message_count" json:"messageCount,omitempty"`
+	CreatedAt    *dto.TimeT `gorm:"column:created_at" json:"createdAt,omitempty"`
+	UpdatedAt    *dto.TimeT `gorm:"column:updated_at" json:"updatedAt,omitempty"`
+}
+
+func (RagSession) TableName() string { return "rag_session" }
 
 // EvalRun 评估运行。
 type EvalRun struct {
@@ -127,5 +141,5 @@ func (EvalCase) TableName() string { return "rag_eval_case" }
 
 // AllModels AutoMigrate 用。
 func AllModels() []any {
-	return []any{&KnowledgeBase{}, &Document{}, &Chunk{}, &Task{}, &ChatLog{}, &EvalRun{}, &EvalCase{}}
+	return []any{&KnowledgeBase{}, &Document{}, &Chunk{}, &Task{}, &ChatLog{}, &RagSession{}, &EvalRun{}, &EvalCase{}}
 }

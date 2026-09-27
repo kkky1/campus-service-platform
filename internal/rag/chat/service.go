@@ -36,6 +36,8 @@ type AskResult struct {
 	Cited      []int       `json:"cited,omitempty"`
 	LatencyMs  int64       `json:"latencyMs"`
 	Model      string      `json:"model,omitempty"`
+	SessionId  int64       `json:"sessionId"`
+	Title      string      `json:"title,omitempty"`
 }
 
 // Service RAG 问答服务。
@@ -57,12 +59,35 @@ func New(st *store.Store, ret *retrieval.Retriever, em embed.Embedder, client ll
 }
 
 // Ask 问答主流程。
-func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, topK int) dto.Result {
+// sessionId 约定：0=新建会话；-1=临时问答（不建会话、不落库，供评估使用）；>0=沿用会话。
+func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, topK int, sessionId int64) dto.Result {
 	start := time.Now()
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return dto.Fail("问题不能为空")
 	}
+
+	// 会话准备（隔离：历史只取本会话）
+	ephemeral := sessionId == -1
+	var sess *store.RagSession
+	if !ephemeral {
+		if sessionId == 0 {
+			title := firstRunes(question, 24)
+			sess = &store.RagSession{KbId: int64P(kbId), UserId: int64P(userId), Title: strP(title), MessageCount: intP(0)}
+			if err := s.store.CreateSession(ctx, sess); err != nil {
+				s.log.Error("创建会话失败", "err", err)
+				return dto.Fail("服务器异常")
+			}
+		} else {
+			var err error
+			sess, err = s.store.GetSession(ctx, sessionId)
+			if err != nil || sess == nil || sess.KbId == nil || *sess.KbId != kbId {
+				return dto.Fail("会话不存在或不属于当前知识库")
+			}
+		}
+	}
+
+	// 检索
 	candidates, err := s.retriever.Retrieve(ctx, kbId, question, topK)
 	if err != nil {
 		s.log.Error("检索失败", "err", err)
@@ -71,7 +96,13 @@ func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, 
 	if len(candidates) == 0 {
 		return dto.Fail("知识库中没有找到相关内容，请先上传资料或换个问法")
 	}
-	answer, err := s.llm.Chat(ctx, systemPrompt, buildUserPrompt(question, candidates))
+
+	// 同会话最近 3 轮对话作为记忆（仅用于理解上下文，不作为引用来源）
+	var history []store.ChatLog
+	if sess != nil && sess.Id != nil {
+		history, _ = s.store.RecentChatLogs(ctx, *sess.Id, 6)
+	}
+	answer, err := s.llm.Chat(ctx, systemPrompt, buildUserPrompt(question, candidates, history))
 	if err != nil {
 		s.log.Error("大模型调用失败", "err", err)
 		return dto.Fail("AI 服务暂时不可用，请稍后重试")
@@ -93,20 +124,43 @@ func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, 
 	latency := time.Since(start).Milliseconds()
 	result := AskResult{Answer: answer, References: refs, Cited: cited, LatencyMs: latency, Model: s.llm.Model()}
 
-	// 问答记录
-	refsJSON, _ := json.Marshal(refs)
-	logRow := &store.ChatLog{
-		KbId: int64P(kbId), UserId: int64P(userId), Question: strP(question), Answer: strP(answer),
-		Refs: strP(string(refsJSON)), LatencyMs: int64P(latency),
-	}
-	if err := s.store.CreateChatLog(ctx, logRow); err != nil {
-		s.log.Warn("问答记录写入失败", "err", err)
+	if sess != nil && sess.Id != nil {
+		result.SessionId = *sess.Id
+		if sess.Title != nil {
+			result.Title = *sess.Title
+		}
+		// 问答记录（带会话）
+		refsJSON, _ := json.Marshal(refs)
+		logRow := &store.ChatLog{
+			KbId: int64P(kbId), SessionId: sess.Id, UserId: int64P(userId), Question: strP(question), Answer: strP(answer),
+			Refs: strP(string(refsJSON)), LatencyMs: int64P(latency),
+		}
+		if err := s.store.CreateChatLog(ctx, logRow); err != nil {
+			s.log.Warn("问答记录写入失败", "err", err)
+		}
+		// 会话计数与时间
+		count := 0
+		if sess.MessageCount != nil {
+			count = *sess.MessageCount
+		}
+		if err := s.store.UpdateSession(ctx, *sess.Id, map[string]any{"message_count": count + 1}); err != nil {
+			s.log.Warn("会话更新失败", "err", err)
+		}
 	}
 	return dto.OkData(result)
 }
 
-// buildUserPrompt 组装上下文与问题。
-func buildUserPrompt(question string, chunks []retrieval.Candidate) string {
+// firstRunes 截取前 n 个字符（会话标题）。
+func firstRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// buildUserPrompt 组装上下文、会话记忆与问题。
+func buildUserPrompt(question string, chunks []retrieval.Candidate, history []store.ChatLog) string {
 	var b strings.Builder
 	b.WriteString("<context>\n")
 	for i, c := range chunks {
@@ -118,10 +172,33 @@ func buildUserPrompt(question string, chunks []retrieval.Candidate) string {
 		b.WriteString(c.Text)
 		b.WriteString("\n\n")
 	}
-	b.WriteString("</context>\n\n问题: ")
+	b.WriteString("</context>\n")
+	if len(history) > 0 {
+		b.WriteString("\n<history>\n（以下为本会话历史，仅用于理解指代与上下文，不要作为事实来源引用）\n")
+		for _, h := range history {
+			if h.Question != nil {
+				b.WriteString("用户: " + truncate(*h.Question, 200) + "\n")
+			}
+			if h.Answer != nil {
+				b.WriteString("助手: " + truncate(*h.Answer, 300) + "\n")
+			}
+		}
+		b.WriteString("</history>\n")
+	}
+	b.WriteString("\n问题: ")
 	b.WriteString(question)
 	return b.String()
 }
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+func intP(v int) *int { return &v }
 
 func int64P(v int64) *int64 { return &v }
 func strP(s string) *string { return &s }

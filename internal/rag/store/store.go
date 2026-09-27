@@ -69,6 +69,9 @@ func (s *Store) DeleteKB(ctx context.Context, id int64) error {
 		if err := tx.Where("kb_id = ?", id).Delete(&ChatLog{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("kb_id = ?", id).Delete(&RagSession{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&KnowledgeBase{}, id).Error
 	})
 }
@@ -154,6 +157,60 @@ func (s *Store) CreateTask(ctx context.Context, t *Task) error {
 
 func (s *Store) UpdateTask(ctx context.Context, id int64, fields map[string]any) error {
 	return s.db.WithContext(ctx).Model(&Task{}).Where("id = ?", id).Updates(fields).Error
+}
+
+// ---- 会话 ----
+
+func (s *Store) CreateSession(ctx context.Context, sess *RagSession) error {
+	return s.db.WithContext(ctx).Create(sess).Error
+}
+
+func (s *Store) GetSession(ctx context.Context, id int64) (*RagSession, error) {
+	var sess RagSession
+	if err := s.db.WithContext(ctx).First(&sess, id).Error; err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
+func (s *Store) ListSessions(ctx context.Context, kbId, userId int64) ([]RagSession, error) {
+	var list []RagSession
+	err := s.db.WithContext(ctx).Where("kb_id = ? AND user_id = ?", kbId, userId).
+		Order("updated_at DESC, id DESC").Find(&list).Error
+	return list, err
+}
+
+func (s *Store) UpdateSession(ctx context.Context, id int64, fields map[string]any) error {
+	return s.db.WithContext(ctx).Model(&RagSession{}).Where("id = ?", id).Updates(fields).Error
+}
+
+// DeleteSession 删除会话及其消息。
+func (s *Store) DeleteSession(ctx context.Context, id int64) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("session_id = ?", id).Delete(&ChatLog{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&RagSession{}, id).Error
+	})
+}
+
+// ListChatLogs 会话内的消息（按时间正序）。
+func (s *Store) ListChatLogs(ctx context.Context, sessionId int64) ([]ChatLog, error) {
+	var list []ChatLog
+	err := s.db.WithContext(ctx).Where("session_id = ?", sessionId).Order("id ASC").Find(&list).Error
+	return list, err
+}
+
+// RecentChatLogs 会话内最近 n 条消息（用于上下文记忆，倒序取完再反转）。
+func (s *Store) RecentChatLogs(ctx context.Context, sessionId int64, n int) ([]ChatLog, error) {
+	var list []ChatLog
+	err := s.db.WithContext(ctx).Where("session_id = ?", sessionId).
+		Order("id DESC").Limit(n).Find(&list).Error
+	// 反转为时间正序
+	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
+		list[i], list[j] = list[j], list[i]
+	}
+	return list, err
 }
 
 // ---- 问答记录 ----

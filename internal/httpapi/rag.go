@@ -200,9 +200,10 @@ func (h *RagHandlers) DeleteDoc(c *gin.Context) {
 // Chat POST /rag/chat
 func (h *RagHandlers) Chat(c *gin.Context) {
 	var body struct {
-		KbId     int64  `json:"kbId"`
-		Question string `json:"question"`
-		TopK     int    `json:"topK"`
+		KbId      int64  `json:"kbId"`
+		Question  string `json:"question"`
+		TopK      int    `json:"topK"`
+		SessionId int64  `json:"sessionId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.KbId == 0 {
 		c.JSON(200, dto.Fail("参数不完整"))
@@ -212,7 +213,80 @@ func (h *RagHandlers) Chat(c *gin.Context) {
 	if u := middleware.CurrentUser(c); u != nil && u.Id != nil {
 		userId = *u.Id
 	}
-	c.JSON(200, h.deps.Chat.Ask(c.Request.Context(), body.KbId, userId, body.Question, body.TopK))
+	c.JSON(200, h.deps.Chat.Ask(c.Request.Context(), body.KbId, userId, body.Question, body.TopK, body.SessionId))
+}
+
+// ListSessions GET /rag/session/list?kbId=
+func (h *RagHandlers) ListSessions(c *gin.Context) {
+	kbId, err := strconv.ParseInt(c.Query("kbId"), 10, 64)
+	if err != nil {
+		c.JSON(200, dto.Fail("kbId 不能为空"))
+		return
+	}
+	var userId int64
+	if u := middleware.CurrentUser(c); u != nil && u.Id != nil {
+		userId = *u.Id
+	}
+	list, err := h.deps.Store.ListSessions(c.Request.Context(), kbId, userId)
+	if err != nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	if list == nil {
+		list = []store.RagSession{}
+	}
+	c.JSON(200, dto.OkData(list))
+}
+
+// SessionMessages GET /rag/session/:id/messages
+func (h *RagHandlers) SessionMessages(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	sess, err := h.deps.Store.GetSession(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(200, dto.Fail("会话不存在"))
+		return
+	}
+	logs, err := h.deps.Store.ListChatLogs(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	// 组装前端消息结构（refs 反序列化为对象）
+	msgs := make([]map[string]any, 0, len(logs)*2)
+	for _, l := range logs {
+		if l.Question != nil {
+			msgs = append(msgs, map[string]any{"role": "user", "text": *l.Question})
+		}
+		if l.Answer != nil {
+			var refs any
+			_ = json.Unmarshal([]byte(valOr(l.Refs, "[]")), &refs)
+			msgs = append(msgs, map[string]any{"role": "assistant", "text": *l.Answer, "refs": refs})
+		}
+	}
+	c.JSON(200, dto.OkData(map[string]any{
+		"sessionId":    *sess.Id,
+		"title":        valOr(sess.Title, ""),
+		"messageCount": sess.MessageCount,
+		"messages":     msgs,
+	}))
+}
+
+// DeleteSession DELETE /rag/session/:id
+func (h *RagHandlers) DeleteSession(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	if err := h.deps.Store.DeleteSession(c.Request.Context(), id); err != nil {
+		c.JSON(200, dto.Fail("服务器异常"))
+		return
+	}
+	c.JSON(200, dto.Ok())
 }
 
 // Retrieve POST /rag/retrieve（检索调试/评估辅助）

@@ -69,7 +69,7 @@ func (r *Runner) Run(ctx context.Context, kbId int64, name string, cases []CaseI
 		answer := in.Answer
 		contexts := in.Contexts
 		if usePipeline && r.chat != nil {
-			res := r.chat.Ask(ctx, kbId, userId, in.Question, r.cfg.Retrieval.TopK)
+			res := r.chat.Ask(ctx, kbId, userId, in.Question, r.cfg.Retrieval.TopK, -1) // -1：临时问答，不建会话
 			if !res.Success {
 				answer, contexts = "", nil
 			} else if ar, ok := res.Data.(chat.AskResult); ok {

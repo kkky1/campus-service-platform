@@ -60,7 +60,10 @@
 | GET | `/rag/doc/:id/chunks` | 文档切片 |
 | DELETE | `/rag/doc/:id` | 删除文档 |
 | POST | `/rag/retrieve` | 混合检索调试 `{kbId, question, topK}` |
-| POST | `/rag/chat` | 问答 `{kbId, question, topK}` → `{answer, references[], cited[], latencyMs}` |
+| POST | `/rag/chat` | 问答 `{kbId, question, topK, sessionId}`（sessionId=0 新建会话，-1 临时问答）→ `{answer, references[], cited[], sessionId, title}` |
+| GET | `/rag/session/list?kbId=` | 会话列表（标题/消息数/更新时间） |
+| GET | `/rag/session/:id/messages` | 会话历史消息（含引用，刷新页面可回看） |
+| DELETE | `/rag/session/:id` | 删除会话及其消息 |
 | POST | `/rag/eval/run` | 评估 `{kbId, name, usePipeline, cases:[{question, groundTruth, answer, contexts}]}` |
 | GET | `/rag/eval/:id` | 评估结果（逐样本指标 + 聚合） |
 

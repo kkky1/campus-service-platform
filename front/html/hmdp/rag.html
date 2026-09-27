@@ -17,6 +17,8 @@
     .rag-header .title { font-size: 17px; font-weight: 600; }
     .kb-bar { display: flex; gap: 8px; padding: 10px 15px; background: #fff; align-items: center; }
     .kb-bar .kb-select { flex: 1; }
+    .session-bar { display: flex; gap: 8px; padding: 6px 15px 10px; background: #fff; align-items: center; border-bottom: 1px solid #f0f0f0; }
+    .session-select { flex: 1; }
     .rag-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
     .pane { flex: 1; overflow-y: auto; padding: 12px 15px 90px; }
     /* 问答 */
@@ -65,6 +67,16 @@
     <el-button size="small" type="success" @click="createKb">新建</el-button>
   </div>
 
+  <div class="session-bar">
+    <el-select class="session-select" size="small" v-model="sessionId" placeholder="新会话（未保存）"
+               @change="onSessionChange" clearable>
+      <el-option v-for="s in sessions" :key="s.id" :value="s.id"
+                 :label="(s.title || '会话') + ' (' + (s.messageCount || 0) + ')'"></el-option>
+    </el-select>
+    <el-button size="small" type="primary" plain @click="newSession">＋ 新会话</el-button>
+    <el-button size="small" type="danger" plain :disabled="!sessionId" @click="deleteSession">删除</el-button>
+  </div>
+
   <div class="rag-body">
     <el-tabs v-model="activeTab" stretch style="flex:1;display:flex;flex-direction:column;">
       <!-- 问答 -->
@@ -77,7 +89,7 @@
             <div class="q" v-if="m.role === 'user'"><span>{{ m.text }}</span></div>
             <div class="a" v-else>
               <div class="bubble">
-                <div v-html="renderAnswer(m.text)" @click="onAnswerClick($event)"></div>
+                <div v-html="renderAnswer(m.text)" :data-mi="i" @click="onAnswerClick($event)"></div>
                 <div class="refs" v-if="m.refs && m.refs.length">
                   <span class="ref-chip" v-for="(r, ri) in m.refs" :key="ri"
                         :class="{cited: r.cited}" @click="showRef(r)">
@@ -193,6 +205,9 @@
       kbs: [],
       kbId: null,
       activeTab: "chat",
+      // 会话
+      sessions: [],
+      sessionId: null,
       // 问答
       question: "",
       asking: false,
@@ -227,16 +242,19 @@
             if (this.kbId) {
               localStorage.setItem("ragKbId", this.kbId);
               this.loadDocs();
+              this.loadSessions();
             }
           })
           .catch(err => this.$message.error(err));
       },
       onKbChange() {
         localStorage.setItem("ragKbId", this.kbId);
+        this.sessionId = null;
         this.messages = [];
         this.evalMetrics = null;
         this.evalCases = [];
         this.loadDocs();
+        this.loadSessions();
       },
       createKb() {
         this.$prompt("输入知识库名称", "新建知识库", {
@@ -253,6 +271,57 @@
             .catch(err => this.$message.error(err));
         }).catch(() => {});
       },
+      // ===== 会话 =====
+      loadSessions(selectFirst) {
+        if (!this.kbId) return;
+        axios.get("/rag/session/list", { params: { kbId: this.kbId } })
+          .then(({ data }) => {
+            this.sessions = data || [];
+            if (selectFirst !== false && this.sessions.length && !this.sessionId) {
+              this.sessionId = this.sessions[0].id;
+              this.loadMessages(this.sessionId);
+            }
+          })
+          .catch(() => {});
+      },
+      onSessionChange(id) {
+        if (id) {
+          this.loadMessages(id);
+        } else {
+          // 清空选择 = 回到未保存的新会话
+          this.messages = [];
+        }
+      },
+      loadMessages(id) {
+        axios.get("/rag/session/" + id + "/messages")
+          .then(({ data }) => {
+            this.messages = (data.messages || []).map((m) => ({
+              role: m.role,
+              text: m.text || "",
+              refs: m.refs || [],
+            }));
+            this.scrollChat();
+          })
+          .catch(err => this.$message.error(err));
+      },
+      newSession() {
+        this.sessionId = null;
+        this.messages = [];
+        this.refDetail = null;
+        this.$message.success("已开启新会话（与其他会话记忆互不相通）");
+      },
+      deleteSession() {
+        if (!this.sessionId) return;
+        this.$confirm("删除该会话及其全部问答记录？", "提示", { type: "warning" })
+          .then(() => axios.delete("/rag/session/" + this.sessionId))
+          .then(() => {
+            this.$message.success("会话已删除");
+            this.sessionId = null;
+            this.messages = [];
+            this.loadSessions(false);
+          })
+          .catch(() => {});
+      },
       // ===== 问答 =====
       ask() {
         if (!this.kbId) { this.$message.warning("请先创建/选择知识库"); return; }
@@ -262,10 +331,17 @@
         this.question = "";
         this.asking = true;
         this.scrollChat();
-        axios.post("/rag/chat", { kbId: this.kbId, question: q })
+        axios.post("/rag/chat", { kbId: this.kbId, question: q, sessionId: this.sessionId || 0 })
           .then(({data}) => {
             this.messages.push({ role: "assistant", text: data.answer, refs: data.references || [] });
             this.scrollChat();
+            // 新会话：记录后端返回的会话 ID 并刷新列表
+            if (data.sessionId && !this.sessionId) {
+              this.sessionId = data.sessionId;
+              this.loadSessions(false);
+            } else if (this.sessionId) {
+              this.loadSessions(false);
+            }
           })
           .catch(err => {
             this.messages.push({ role: "assistant", text: "⚠️ " + err, refs: [] });
@@ -286,11 +362,17 @@
         return esc.replace(/\[ID:(\d+)\]/g, '<span class="cite" data-id="$1">[$1]</span>');
       },
       onAnswerClick(e) {
-        const id = e.target && e.target.getAttribute && e.target.getAttribute("data-id");
-        if (id !== null && id !== undefined && e.target.classList.contains("cite")) {
-          const msg = this.messages[this.messages.length - 1];
-          const ref = (msg.refs || [])[Number(id)];
-          if (ref) this.showRef(ref);
+        // 修复：点击任意旧消息的引用角标，都应取该消息自己的引用列表
+        const target = e.target;
+        const id = target && target.getAttribute && target.getAttribute("data-id");
+        if (id === null || id === undefined || !target.classList.contains("cite")) return;
+        const mi = e.currentTarget && e.currentTarget.getAttribute("data-mi");
+        const msg = this.messages[Number(mi)];
+        const ref = msg && (msg.refs || [])[Number(id)];
+        if (ref) {
+          this.showRef(ref);
+        } else {
+          this.$message.warning("该引用内容不可用（可能已被删除）");
         }
       },
       showRef(ref) { this.refDetail = ref; },
