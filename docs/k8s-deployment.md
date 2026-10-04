@@ -197,3 +197,26 @@ kubectl -n campus rollout undo deployment/frontend
 3. **NodePort 8080**：k3s 安装参数 `--service-node-port-range=8080-32767` 允许低端口 8080，保持对外 NAT 映射不变。
 4. **kafka headless**：KRaft 组合模式 broker 需通过 `kafka:9093` 连接自身 controller，必须用 `clusterIP: None` + `publishNotReadyAddresses: true`，否则起不来。
 5. **上传卷共享**：单节点下 `ReadWriteOnce` 的 `uploads` PVC 由 backend（读写）与 frontend（只读）同时挂载，配合 `fsGroup: 10001` 保证容器 uid 10001 可写。
+
+## 10. 手动部署操作面板（可视化打包 / 滚动更新）
+
+宿主机上运行一个轻量 Web 面板（`cmd/deployd`），可在浏览器点按钮手动执行：
+
+| 按钮 | 动作 |
+|---|---|
+| 拉取代码 | `git pull origin main` |
+| 打包后端 / 打包前端 | 编译 + `docker build` + 导入 k3s containerd（镜像 tag `manual-<时间戳>`） |
+| 滚动更新后端 / 前端 | `kubectl set image` + `kubectl rollout status`（实时回显） |
+| 打包+更新 | 上面两步合并 |
+| 一键部署全部 | 拉取代码 + 全部打包 + 全部滚动更新 |
+
+- 地址：`http://127.0.0.1:8091`（仅绑定本机，通过 SSH 隧道访问：
+  `ssh -p <端口> -L 8091:127.0.0.1:8091 root@<IP>`）
+- 访问令牌：`.env` 中的 `DEPLOY_TOKEN`（未设置则无鉴权，建议设置）
+- 安装/启动：
+  ```bash
+  go build -o bin/deployd ./cmd/deployd
+  cp deploy/dashboard/deployd.service /etc/systemd/system/
+  systemctl daemon-reload && systemctl enable --now deployd
+  ```
+- 日志：`journalctl -u deployd -f`

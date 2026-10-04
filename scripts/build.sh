@@ -12,6 +12,10 @@ BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 mkdir -p "$(dirname "$OUT")"
 echo "构建 ${OUT}  version=${VERSION} commit=${COMMIT} time=${BUILD_TIME}"
+# systemd/面板环境下缺省设置 Go 缓存路径（有则沿用现有值）
+export GOPATH="${GOPATH:-/root/go}"
+export GOMODCACHE="${GOMODCACHE:-/root/go/pkg/mod}"
+export GOCACHE="${GOCACHE:-/root/go/build-cache}"
 # 小内存机器：限制并行编译与 Go 运行并发，避免 OOM
 export GOMAXPROCS=${GOMAXPROCS:-1}
 CGO_ENABLED=0 go build -p 1 -trimpath \

@@ -47,6 +47,9 @@ front/nginx.exe
 bin/
 data/
 
+### k8s 本地缓存 ###
+.kube/
+
 ### 环境变量（RAG 密钥等）
 .env
 

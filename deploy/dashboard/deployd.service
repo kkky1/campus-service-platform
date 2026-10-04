@@ -1,0 +1,17 @@
+[Unit]
+Description=Campus Deploy Dashboard (手动打包/滚动更新面板)
+After=network.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/ykwork/campus-service-platform
+Environment=HOME=/root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=DEPLOY_PORT=8091
+EnvironmentFile=-/root/ykwork/campus-service-platform/.env
+ExecStart=/root/ykwork/campus-service-platform/bin/deployd
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
