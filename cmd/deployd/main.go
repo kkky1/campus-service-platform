@@ -237,6 +237,13 @@ func authOK(r *http.Request) bool {
 type api struct{}
 
 func (api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 首页（静态 HTML）无需鉴权，否则用户无法打开页面输入令牌；
+	// 仅 /api/* 接口要求令牌。
+	if r.URL.Path == "/" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, htmlPage)
+		return
+	}
 	if !authOK(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		writeJSON(w, map[string]string{"error": "unauthorized"})
@@ -398,7 +405,7 @@ input{flex:1;background:#0b1220;border:1px solid var(--border);border-radius:10p
 <script>
 var curJob = null, timer = null;
 function token(){ return localStorage.getItem('deploy_token') || '' }
-function saveToken(){ localStorage.setItem('deploy_token', document.getElementById('token').value); }
+function saveToken(){ localStorage.setItem('deploy_token', document.getElementById('token').value); refresh(); }
 document.getElementById('token').value = token();
 function hdrs(){ var t = token(); return t ? {'X-Deploy-Token': t} : {} }
 
