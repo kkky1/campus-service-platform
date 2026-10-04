@@ -4,7 +4,16 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/campus-server ./cmd/server
+# 构建信息通过 ARG 注入，便于状态页展示版本/提交/构建时间
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags "-s -w \
+      -X campus-service-platform/internal/pkg/buildinfo.Version=${VERSION} \
+      -X campus-service-platform/internal/pkg/buildinfo.Commit=${COMMIT} \
+      -X campus-service-platform/internal/pkg/buildinfo.Time=${BUILD_TIME}" \
+    -o /out/campus-server ./cmd/server
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 app

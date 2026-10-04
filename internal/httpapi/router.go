@@ -14,6 +14,11 @@ func NewRouter(h *Handlers) *gin.Engine {
 	r.Use(middleware.TokenRefresh(h.App.RDB))
 	r.Use(middleware.LoginAuth())
 
+	// 健康与部署状态（探针 / 可视化状态页数据源）
+	r.GET("/healthz", h.Healthz)
+	r.GET("/readyz", h.Readyz)
+	r.GET("/deploy/status", h.DeployStatus)
+
 	// 用户
 	r.POST("/user/code", h.SendCode)
 	r.POST("/user/login", h.Login)

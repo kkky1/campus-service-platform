@@ -1,0 +1,12 @@
+# 上传文件卷：backend（读写）与 frontend（只读）共享。
+# 单节点 k3s + local-path 下，ReadWriteOnce 卷可被同节点多个 Pod 同时挂载。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads
+  namespace: campus
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi

@@ -23,9 +23,10 @@ const (
 
 // Producer Kafka 生产者（实现 service.OrderPublisher）。
 type Producer struct {
-	w      *kafka.Writer
-	log    *slog.Logger
-	closed bool
+	w       *kafka.Writer
+	brokers []string
+	log     *slog.Logger
+	closed  bool
 }
 
 // NewProducer 创建同步生产者（acks=all）。
@@ -39,7 +40,19 @@ func NewProducer(brokers []string, log *slog.Logger) *Producer {
 		Balancer:     &kafka.Hash{},
 		RequiredAcks: kafka.RequireAll,
 	}
-	return &Producer{w: w, log: log}
+	return &Producer{w: w, brokers: brokers, log: log}
+}
+
+// Ping 探测 Kafka broker 连通性（用于就绪探针 / 状态页）。
+func (p *Producer) Ping(ctx context.Context) error {
+	if len(p.brokers) == 0 {
+		return errors.New("no kafka brokers")
+	}
+	conn, err := kafka.DialContext(ctx, "tcp", p.brokers[0])
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 // PublishSeckillOrder 发送秒杀订单消息。

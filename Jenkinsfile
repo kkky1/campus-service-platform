@@ -47,7 +47,7 @@ pipeline {
         }
         stage('编译二进制') {
             steps {
-                sh 'mkdir -p bin && go build -o bin/campus-server ./cmd/server'
+                sh 'chmod +x scripts/build.sh && ./scripts/build.sh bin/campus-server'
             }
         }
         stage('部署') {

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>部署状态 · 校园服务平台</title>
+  <style>
+    :root {
+      --ok: #22c55e;
+      --bad: #ef4444;
+      --warn: #f59e0b;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      padding: 24px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    .head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+    }
+    .head h1 { font-size: 20px; margin: 0; }
+    .head .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-radius: 999px; font-weight: 600; font-size: 14px;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,.15); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px rgba(239,68,68,.15); }
+    .dot.warn { background: var(--warn); }
+    .pulse { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .card .k { font-size: 12px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em; }
+    .card .v { font-size: 17px; font-weight: 600; word-break: break-all; }
+    .card .v.small { font-size: 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+    h2 { font-size: 15px; margin: 24px 0 12px; color: var(--ink); }
+    .deps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .dep {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .dep .info { flex: 1; }
+    .dep .name { font-weight: 600; font-size: 15px; }
+    .dep .meta { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+
+    .flash {
+      margin-top: 16px; padding: 12px 16px; border-radius: 12px; font-size: 13px;
+      background: #fef3c7; color: #92400e; border: 1px solid #fde68a; display: none;
+    }
+    .footer { margin-top: 24px; color: var(--muted); font-size: 12px; text-align: center; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1>🚀 部署状态 · 校园服务平台</h1>
+        <div class="sub">可视化状态页：版本、依赖健康、Pod 与滚动更新进度</div>
+      </div>
+      <div class="badge"><span class="dot" id="overall-dot"></span><span id="overall-text">连接中…</span></div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="k">当前版本</div><div class="v mono" id="version">—</div></div>
+      <div class="card"><div class="k">Git 提交</div><div class="v small" id="commit">—</div></div>
+      <div class="card"><div class="k">构建时间</div><div class="v small" id="build-time">—</div></div>
+      <div class="card"><div class="k">服务 Pod</div><div class="v small" id="pod">—</div></div>
+      <div class="card"><div class="k">运行时长</div><div class="v" id="uptime">—</div></div>
+      <div class="card"><div class="k">探测次数</div><div class="v" id="polls">0</div></div>
+    </div>
+
+    <h2>依赖健康状态</h2>
+    <div class="deps" id="deps">
+      <div class="dep"><span class="dot" id="d-mysql"></span><div class="info"><div class="name">MySQL</div><div class="meta" id="m-mysql">探测中…</div></div></div>
+      <div class="dep"><span class="dot" id="d-redis"></span><div class="info"><div class="name">Redis</div><div class="meta" id="m-redis">探测中…</div></div></div>
+      <div class="dep"><span class="dot" id="d-kafka"></span><div class="info"><div class="name">Kafka</div><div class="meta" id="m-kafka">探测中…</div></div></div>
+    </div>
+
+    <div class="flash" id="flash"></div>
+    <div class="footer">每 5 秒自动刷新 · 滚动更新时「当前版本 / Pod」会随流量切换在新旧副本之间变化</div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    let polls = 0;
+    let lastVersion = null;
+
+    function fmtUptime(sec) {
+      if (sec == null) return '—';
+      const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600),
+            m = Math.floor(sec % 3600 / 60), s = sec % 60;
+      const parts = [];
+      if (d) parts.push(d + '天');
+      if (h || d) parts.push(h + '时');
+      if (m || h || d) parts.push(m + '分');
+      parts.push(s + '秒');
+      return parts.join(' ');
+    }
+
+    function setDep(name, dep) {
+      const dot = $('d-' + name), meta = $('m-' + name);
+      dot.className = 'dot ' + (dep ? (dep.healthy ? 'ok' : 'bad') : 'warn');
+      if (!dep) { meta.textContent = '不可判定'; return; }
+      meta.textContent = dep.healthy
+        ? (dep.latency_ms != null ? dep.latency_ms + ' ms' : '正常')
+        : (dep.error || '异常');
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch('/api/deploy/status', { cache: 'no-store' });
+        const data = await res.json();
+        polls++;
+        $('polls').textContent = polls;
+
+        $('version').textContent = data.version || '—';
+        $('commit').textContent = (data.commit || '—').slice(0, 12);
+        $('build-time').textContent = data.build_time || '—';
+        $('pod').textContent = data.pod || '—';
+        $('uptime').textContent = fmtUptime(data.uptime_seconds);
+
+        const ready = !!data.ready;
+        const dot = $('overall-dot'), txt = $('overall-text');
+        dot.className = 'dot ' + (ready ? 'ok' : 'bad') + (ready ? '' : ' pulse');
+        txt.textContent = ready ? '运行正常' : '降级（依赖异常）';
+
+        (data.deps || []).forEach(d => setDep(d.name, d));
+        ['mysql','redis','kafka'].forEach(n => {
+          if (!(data.deps || []).some(d => d.name === n)) setDep(n, null);
+        });
+
+        // 滚动更新探测：版本发生变化时给出可视化提示
+        const flash = $('flash');
+        if (lastVersion && lastVersion !== data.version) {
+          flash.style.display = 'block';
+          flash.innerHTML = '🔄 检测到版本变化：<span class="mono">' + lastVersion + '</span> → <span class="mono">' + data.version + '</span>，滚动更新进行中…';
+        } else if (ready) {
+          flash.style.display = 'none';
+        }
+        lastVersion = data.version;
+      } catch (e) {
+        const dot = $('overall-dot'), txt = $('overall-text');
+        dot.className = 'dot bad pulse';
+        txt.textContent = '无法连接后端';
+      }
+    }
+
+    poll();
+    setInterval(poll, 5000);
+  </script>
+</body>
+</html>

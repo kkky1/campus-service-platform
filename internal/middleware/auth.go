@@ -75,9 +75,12 @@ func TokenRefresh(rdb *redis.Client) gin.HandlerFunc {
 
 // 免登录白名单（对齐 MvcConfig.excludePathPatterns）。
 var whitelistExact = map[string]bool{
-	"/user/login": true,
-	"/user/code":  true,
-	"/blog/hot":   true,
+	"/user/login":   true,
+	"/user/code":    true,
+	"/blog/hot":     true,
+	"/healthz":      true,
+	"/readyz":       true,
+	"/deploy/status": true,
 }
 
 var whitelistPrefix = []string{
