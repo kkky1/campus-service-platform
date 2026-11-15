@@ -64,6 +64,13 @@ spec:
               value: "/data/uploads"
             - name: LOGIN_SKIP_CODE
               value: "true"
+            # RAG 大模型密钥由 apply.sh 写入 campus-secrets；缺失时 RAG 问答不可用（不阻断启动）
+            - name: RAG_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: campus-secrets
+                  key: RAG_LLM_API_KEY
+                  optional: true
             - name: CONFIG_PATH
               value: "/app/config.yaml"
           ports:
