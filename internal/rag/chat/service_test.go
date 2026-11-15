@@ -132,6 +132,10 @@ func TestAskLLMError(t *testing.T) {
 	if res.Success || res.ErrorMsg == nil || !strings.Contains(*res.ErrorMsg, "AI 服务暂时不可用") {
 		t.Fatalf("LLM 失败应提示: %v", res)
 	}
+	// 失败不应留下空会话
+	if list, _ := e.store.ListSessions(context.Background(), e.kbId, 1); len(list) != 0 {
+		t.Fatalf("LLM 失败不应创建会话: %d", len(list))
+	}
 }
 
 func TestAskEmptyKB(t *testing.T) {
@@ -143,6 +147,10 @@ func TestAskEmptyKB(t *testing.T) {
 	res := e.svc.Ask(context.Background(), *empty.Id, 1, "任意问题", 3, 0)
 	if res.Success || res.ErrorMsg == nil || !strings.Contains(*res.ErrorMsg, "没有找到相关内容") {
 		t.Fatalf("空库应提示: %v", res)
+	}
+	// 失败不应留下空会话
+	if list, _ := e.store.ListSessions(context.Background(), *empty.Id, 1); len(list) != 0 {
+		t.Fatalf("检索无结果不应创建会话: %d", len(list))
 	}
 }
 
@@ -177,7 +185,7 @@ func TestSessionIsolationAndPersistence(t *testing.T) {
 	if len(logsA) != 2 {
 		t.Fatalf("会话A消息数 = %d, want 2", len(logsA))
 	}
-	sessRow, _ := e.store.GetSession(ctx, sessA)
+	sessRow, _ := e.store.GetSession(ctx, sessA, 1)
 	if sessRow == nil || *sessRow.MessageCount != 2 {
 		t.Fatalf("会话计数未累计: %+v", sessRow)
 	}
@@ -200,7 +208,7 @@ func TestSessionIsolationAndPersistence(t *testing.T) {
 	}
 
 	// 删除会话 A 只清 A
-	if err := e.store.DeleteSession(ctx, sessA); err != nil {
+	if err := e.store.DeleteSession(ctx, sessA, 1); err != nil {
 		t.Fatal(err)
 	}
 	if logs, _ := e.store.ListChatLogs(ctx, sessA); len(logs) != 0 {
@@ -208,6 +216,42 @@ func TestSessionIsolationAndPersistence(t *testing.T) {
 	}
 	if logs, _ := e.store.ListChatLogs(ctx, sessB); len(logs) != 1 {
 		t.Fatalf("删除会话A不应影响会话B: %d", len(logs))
+	}
+}
+
+// 会话跨用户隔离：他人不能复用/读取/删除别人的会话
+func TestSessionCrossUserForbidden(t *testing.T) {
+	e := newChatEnv(t, "食堂每天早上 7 点开门。", nil)
+	ctx := context.Background()
+
+	r1 := e.svc.Ask(ctx, e.kbId, 1, "食堂几点开门？", 3, 0)
+	if !r1.Success {
+		t.Fatalf("用户1 问答失败: %v", r1)
+	}
+	sessA := r1.Data.(AskResult).SessionId
+	if sessA == 0 {
+		t.Fatal("应返回会话 ID")
+	}
+
+	// 用户2 复用用户1 的会话：拒绝，且不得写入
+	r2 := e.svc.Ask(ctx, e.kbId, 2, "那图书馆呢？", 3, sessA)
+	if r2.Success {
+		t.Fatal("跨用户复用会话应被拒绝")
+	}
+	if logs, _ := e.store.ListChatLogs(ctx, sessA); len(logs) != 1 {
+		t.Fatalf("越权提问不应写入会话: %d", len(logs))
+	}
+
+	// 用户2 读取/删除用户1 的会话：查不到
+	if sess, err := e.store.GetSession(ctx, sessA, 2); err == nil || sess != nil {
+		t.Fatalf("跨用户读取会话应失败: %+v %v", sess, err)
+	}
+	if err := e.store.DeleteSession(ctx, sessA, 2); err == nil {
+		t.Fatal("跨用户删除会话应失败")
+	}
+	// 用户1 自己的会话仍然可读
+	if sess, err := e.store.GetSession(ctx, sessA, 1); err != nil || sess == nil {
+		t.Fatalf("本人读取会话失败: %v", err)
 	}
 }
 

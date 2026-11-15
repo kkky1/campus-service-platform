@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"campus-service-platform/internal/config"
 	"campus-service-platform/internal/middleware"
@@ -197,6 +199,14 @@ func (h *RagHandlers) DeleteDoc(c *gin.Context) {
 	c.JSON(200, dto.Ok())
 }
 
+// currentUserID 取当前登录用户 ID（登录中间件保证非 0）。
+func currentUserID(c *gin.Context) int64 {
+	if u := middleware.CurrentUser(c); u != nil && u.Id != nil {
+		return *u.Id
+	}
+	return 0
+}
+
 // Chat POST /rag/chat
 func (h *RagHandlers) Chat(c *gin.Context) {
 	var body struct {
@@ -209,11 +219,7 @@ func (h *RagHandlers) Chat(c *gin.Context) {
 		c.JSON(200, dto.Fail("参数不完整"))
 		return
 	}
-	var userId int64
-	if u := middleware.CurrentUser(c); u != nil && u.Id != nil {
-		userId = *u.Id
-	}
-	c.JSON(200, h.deps.Chat.Ask(c.Request.Context(), body.KbId, userId, body.Question, body.TopK, body.SessionId))
+	c.JSON(200, h.deps.Chat.Ask(c.Request.Context(), body.KbId, currentUserID(c), body.Question, body.TopK, body.SessionId))
 }
 
 // ListSessions GET /rag/session/list?kbId=
@@ -223,11 +229,7 @@ func (h *RagHandlers) ListSessions(c *gin.Context) {
 		c.JSON(200, dto.Fail("kbId 不能为空"))
 		return
 	}
-	var userId int64
-	if u := middleware.CurrentUser(c); u != nil && u.Id != nil {
-		userId = *u.Id
-	}
-	list, err := h.deps.Store.ListSessions(c.Request.Context(), kbId, userId)
+	list, err := h.deps.Store.ListSessions(c.Request.Context(), kbId, currentUserID(c))
 	if err != nil {
 		c.JSON(200, dto.Fail("服务器异常"))
 		return
@@ -245,9 +247,13 @@ func (h *RagHandlers) SessionMessages(c *gin.Context) {
 		c.JSON(200, dto.Fail("服务器异常"))
 		return
 	}
-	sess, err := h.deps.Store.GetSession(c.Request.Context(), id)
+	sess, err := h.deps.Store.GetSession(c.Request.Context(), id, currentUserID(c))
 	if err != nil {
-		c.JSON(200, dto.Fail("会话不存在"))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(200, dto.Fail("会话不存在"))
+		} else {
+			c.JSON(200, dto.Fail("服务器异常"))
+		}
 		return
 	}
 	logs, err := h.deps.Store.ListChatLogs(c.Request.Context(), id)
@@ -282,8 +288,12 @@ func (h *RagHandlers) DeleteSession(c *gin.Context) {
 		c.JSON(200, dto.Fail("服务器异常"))
 		return
 	}
-	if err := h.deps.Store.DeleteSession(c.Request.Context(), id); err != nil {
-		c.JSON(200, dto.Fail("服务器异常"))
+	if err := h.deps.Store.DeleteSession(c.Request.Context(), id, currentUserID(c)); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(200, dto.Fail("会话不存在"))
+		} else {
+			c.JSON(200, dto.Fail("服务器异常"))
+		}
 		return
 	}
 	c.JSON(200, dto.Ok())

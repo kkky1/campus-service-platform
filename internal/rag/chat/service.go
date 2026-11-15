@@ -67,23 +67,14 @@ func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, 
 		return dto.Fail("问题不能为空")
 	}
 
-	// 会话准备（隔离：历史只取本会话）
+	// 会话准备（隔离：历史只取本会话；新会话在回答成功后才创建，避免失败留下空会话）
 	ephemeral := sessionId == -1
 	var sess *store.RagSession
-	if !ephemeral {
-		if sessionId == 0 {
-			title := firstRunes(question, 24)
-			sess = &store.RagSession{KbId: int64P(kbId), UserId: int64P(userId), Title: strP(title), MessageCount: intP(0)}
-			if err := s.store.CreateSession(ctx, sess); err != nil {
-				s.log.Error("创建会话失败", "err", err)
-				return dto.Fail("服务器异常")
-			}
-		} else {
-			var err error
-			sess, err = s.store.GetSession(ctx, sessionId)
-			if err != nil || sess == nil || sess.KbId == nil || *sess.KbId != kbId {
-				return dto.Fail("会话不存在或不属于当前知识库")
-			}
+	if !ephemeral && sessionId != 0 {
+		var err error
+		sess, err = s.store.GetSession(ctx, sessionId, userId)
+		if err != nil || sess == nil || sess.KbId == nil || *sess.KbId != kbId {
+			return dto.Fail("会话不存在或无权访问")
 		}
 	}
 
@@ -124,7 +115,16 @@ func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, 
 	latency := time.Since(start).Milliseconds()
 	result := AskResult{Answer: answer, References: refs, Cited: cited, LatencyMs: latency, Model: s.llm.Model()}
 
-	if sess != nil && sess.Id != nil {
+	if !ephemeral {
+		if sess == nil {
+			// 新会话：回答成功后再落库，避免检索/LLM 失败留下空会话
+			title := firstRunes(question, 24)
+			sess = &store.RagSession{KbId: int64P(kbId), UserId: int64P(userId), Title: strP(title), MessageCount: intP(0)}
+			if err := s.store.CreateSession(ctx, sess); err != nil {
+				s.log.Error("创建会话失败", "err", err)
+				return dto.Fail("服务器异常")
+			}
+		}
 		result.SessionId = *sess.Id
 		if sess.Title != nil {
 			result.Title = *sess.Title
@@ -138,13 +138,9 @@ func (s *Service) Ask(ctx context.Context, kbId, userId int64, question string, 
 		if err := s.store.CreateChatLog(ctx, logRow); err != nil {
 			s.log.Warn("问答记录写入失败", "err", err)
 		}
-		// 会话计数与时间
-		count := 0
-		if sess.MessageCount != nil {
-			count = *sess.MessageCount
-		}
-		if err := s.store.UpdateSession(ctx, *sess.Id, map[string]any{"message_count": count + 1}); err != nil {
-			s.log.Warn("会话更新失败", "err", err)
+		// 会话计数（原子累加）
+		if err := s.store.IncrementSessionCount(ctx, *sess.Id); err != nil {
+			s.log.Warn("会话计数更新失败", "err", err)
 		}
 	}
 	return dto.OkData(result)
