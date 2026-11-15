@@ -36,6 +36,11 @@ func envOr(k, d string) string {
 
 // ---------- Job 管理 ----------
 
+const (
+	maxJobs     = 20   // 最多保留最近 20 个任务，避免面板长期运行内存/接口响应无限增长
+	maxJobLines = 5000 // 单个任务最多保留 5000 行日志
+)
+
 type Job struct {
 	ID     string    `json:"id"`
 	Name   string    `json:"name"`
@@ -44,20 +49,39 @@ type Job struct {
 	End    time.Time `json:"end"`
 	mu     sync.Mutex
 	Lines  []string `json:"lines"`
+	seq    int
 }
 
 func (j *Job) append(line string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	if len(j.Lines) >= maxJobLines {
+		// 超限时丢弃较早的一半，保证日志量有界且仍保留最新输出
+		j.Lines = j.Lines[len(j.Lines)/2:]
+	}
 	j.Lines = append(j.Lines, line)
 }
 
-func (j *Job) snapshot() []string {
+// complete 原子更新任务状态与结束时间。
+func (j *Job) complete(status string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	out := make([]string, len(j.Lines))
-	copy(out, j.Lines)
-	return out
+	j.Status = status
+	j.End = time.Now()
+}
+
+// MarshalJSON 持锁输出快照，避免 /api/jobs 的 JSON 编码与日志追加/状态更新并发读写。
+func (j *Job) MarshalJSON() ([]byte, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return json.Marshal(struct {
+		ID     string    `json:"id"`
+		Name   string    `json:"name"`
+		Status string    `json:"status"`
+		Start  time.Time `json:"start"`
+		End    time.Time `json:"end"`
+		Lines  []string  `json:"lines"`
+	}{j.ID, j.Name, j.Status, j.Start, j.End, j.Lines})
 }
 
 type jobStore struct {
@@ -78,8 +102,18 @@ func (s *jobStore) add(name string) *Job {
 		Status: "running",
 		Start:  time.Now(),
 		Lines:  []string{},
+		seq:    s.seq,
 	}
 	s.jobs[j.ID] = j
+	for len(s.jobs) > maxJobs {
+		var oldest *Job
+		for _, job := range s.jobs {
+			if oldest == nil || job.seq < oldest.seq {
+				oldest = job
+			}
+		}
+		delete(s.jobs, oldest.ID)
+	}
 	return j
 }
 
@@ -90,7 +124,7 @@ func (s *jobStore) list() []*Job {
 	for _, j := range s.jobs {
 		out = append(out, j)
 	}
-	sort.Slice(out, func(i, k int) bool { return out[i].ID > out[k].ID })
+	sort.Slice(out, func(i, k int) bool { return out[i].seq > out[k].seq })
 	return out
 }
 
@@ -109,7 +143,7 @@ func bashScript(action string) (string, error) {
 	reg := "ghcr.io/kkky1/campus-service-platform"
 	common := "export KUBECONFIG=" + kubeCfg + "\ncd " + repo + "\n"
 	tag := func(svc string) string {
-		return fmt.Sprintf("TAG=\"manual-$(date +%%Y%%m%%d%%H%%M%%S)\"\necho \"$TAG\" > bin/last-%s-tag\n", svc)
+		return fmt.Sprintf("mkdir -p bin\nTAG=\"manual-$(date +%%Y%%m%%d%%H%%M%%S)\"\necho \"$TAG\" > bin/last-%s-tag\n", svc)
 	}
 	img := func(svc string) string { return reg + "/" + svc }
 
@@ -176,40 +210,45 @@ func runJob(j *Job, action string) {
 	script, err := bashScript(action)
 	if err != nil {
 		j.append("❌ " + err.Error())
-		j.Status = "failed"
-		j.End = time.Now()
+		j.complete("failed")
 		return
 	}
 	cmd := exec.Command("bash", "-c", script)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		j.append("❌ stdout: " + err.Error())
-		j.Status = "failed"
-		j.End = time.Now()
+		j.complete("failed")
 		return
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		j.append("❌ stderr: " + err.Error())
-		j.Status = "failed"
-		j.End = time.Now()
+		j.complete("failed")
 		return
 	}
 	if err := cmd.Start(); err != nil {
 		j.append("❌ 启动失败: " + err.Error())
-		j.Status = "failed"
-		j.End = time.Now()
+		j.complete("failed")
 		return
 	}
-	go scanLines(stdout, j)
-	go scanLines(stderr, j)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		scanLines(stdout, j)
+	}()
+	go func() {
+		defer wg.Done()
+		scanLines(stderr, j)
+	}()
+	// 先读尽 stdout/stderr 再 Wait/落状态，避免尾部日志丢失
+	wg.Wait()
 	if err := cmd.Wait(); err != nil {
 		j.append("❌ 命令退出码非 0: " + err.Error())
-		j.Status = "failed"
+		j.complete("failed")
 	} else {
-		j.Status = "success"
+		j.complete("success")
 	}
-	j.End = time.Now()
 }
 
 func scanLines(r io.Reader, j *Job) {

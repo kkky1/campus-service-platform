@@ -243,6 +243,61 @@ func TestRagBadInput(t *testing.T) {
 	}
 }
 
+func TestRagSessionOwnership(t *testing.T) {
+	r, _, mr := fullRagEnv(t)
+	tokenA, _ := loginToken(t, r, mr, "13800000031")
+	tokenB, _ := loginToken(t, r, mr, "13800000032")
+	authA := map[string]string{"authorization": tokenA}
+	authB := map[string]string{"authorization": tokenB}
+
+	// 用户 A 建库、上传并等待入库
+	_, m := doJSON(t, r, "POST", "/rag/kb", `{"name":"会话隔离测试库"}`, authA)
+	if m["success"] != true {
+		t.Fatalf("建库失败: %v", m)
+	}
+	kbId := int64(m["data"].(map[string]any)["id"].(float64))
+	doc := uploadDoc(t, r, tokenA, kbId, "食堂.md", "# 食堂\n\n食堂位于南区，开放时间为每天 7:00 到 21:00。")
+	waitDocDone(t, r, tokenA, kbId, doc)
+
+	// 用户 A 提问，得到会话 ID
+	_, m = doJSON(t, r, "POST", "/rag/chat", fmt.Sprintf(`{"kbId":%d,"question":"食堂几点开门？"}`, kbId), authA)
+	if m["success"] != true {
+		t.Fatalf("A 问答失败: %v", m)
+	}
+	sessId := int64(m["data"].(map[string]any)["sessionId"].(float64))
+	if sessId == 0 {
+		t.Fatal("A 应得到会话 ID")
+	}
+
+	// 用户 B 读取 A 的会话：拒绝
+	if _, m = doJSON(t, r, "GET", fmt.Sprintf("/rag/session/%d/messages", sessId), "", authB); m["success"] == true {
+		t.Fatal("B 不应读取 A 的会话")
+	}
+	// 用户 B 往 A 的会话提问：拒绝
+	if _, m = doJSON(t, r, "POST", "/rag/chat",
+		fmt.Sprintf(`{"kbId":%d,"question":"图书馆呢？","sessionId":%d}`, kbId, sessId), authB); m["success"] == true {
+		t.Fatal("B 不应向 A 的会话提问")
+	}
+	// 用户 B 删除 A 的会话：拒绝
+	if _, m = doJSON(t, r, "DELETE", fmt.Sprintf("/rag/session/%d", sessId), "", authB); m["success"] == true {
+		t.Fatal("B 不应删除 A 的会话")
+	}
+
+	// 用户 A 仍可读取自己的会话，且只有一轮问答两条消息
+	_, m = doJSON(t, r, "GET", fmt.Sprintf("/rag/session/%d/messages", sessId), "", authA)
+	if m["success"] != true {
+		t.Fatalf("A 读取自己的会话失败: %v", m)
+	}
+	msgs, _ := m["data"].(map[string]any)["messages"].([]any)
+	if len(msgs) != 2 {
+		t.Fatalf("会话消息数 = %d, want 2", len(msgs))
+	}
+	// 用户 A 删除自己的会话：成功
+	if _, m = doJSON(t, r, "DELETE", fmt.Sprintf("/rag/session/%d", sessId), "", authA); m["success"] != true {
+		t.Fatalf("A 删除自己的会话失败: %v", m)
+	}
+}
+
 func containsStr(s, sub string) bool {
 	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
 }

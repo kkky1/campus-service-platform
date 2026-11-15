@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -165,9 +166,10 @@ func (s *Store) CreateSession(ctx context.Context, sess *RagSession) error {
 	return s.db.WithContext(ctx).Create(sess).Error
 }
 
-func (s *Store) GetSession(ctx context.Context, id int64) (*RagSession, error) {
+// GetSession 按「会话 ID + 当前用户」读取，避免跨用户读取他人会话。
+func (s *Store) GetSession(ctx context.Context, id, userId int64) (*RagSession, error) {
 	var sess RagSession
-	if err := s.db.WithContext(ctx).First(&sess, id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userId).First(&sess).Error; err != nil {
 		return nil, err
 	}
 	return &sess, nil
@@ -180,17 +182,26 @@ func (s *Store) ListSessions(ctx context.Context, kbId, userId int64) ([]RagSess
 	return list, err
 }
 
-func (s *Store) UpdateSession(ctx context.Context, id int64, fields map[string]any) error {
-	return s.db.WithContext(ctx).Model(&RagSession{}).Where("id = ?", id).Updates(fields).Error
+// IncrementSessionCount 原子累加会话问答轮数并刷新更新时间，避免并发问答丢计数。
+func (s *Store) IncrementSessionCount(ctx context.Context, id int64) error {
+	return s.db.WithContext(ctx).Model(&RagSession{}).Where("id = ?", id).
+		Updates(map[string]any{
+			"message_count": gorm.Expr("COALESCE(message_count, 0) + 1"),
+			"updated_at":    time.Now(),
+		}).Error
 }
 
-// DeleteSession 删除会话及其消息。
-func (s *Store) DeleteSession(ctx context.Context, id int64) error {
+// DeleteSession 删除指定用户的会话及其消息；不属于该用户时返回 gorm.ErrRecordNotFound。
+func (s *Store) DeleteSession(ctx context.Context, id, userId int64) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("session_id = ?", id).Delete(&ChatLog{}).Error; err != nil {
-			return err
+		res := tx.Where("id = ? AND user_id = ?", id, userId).Delete(&RagSession{})
+		if res.Error != nil {
+			return res.Error
 		}
-		return tx.Delete(&RagSession{}, id).Error
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Where("session_id = ?", id).Delete(&ChatLog{}).Error
 	})
 }
 

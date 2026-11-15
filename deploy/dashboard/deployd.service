@@ -6,7 +6,7 @@ After=network.target docker.service
 Type=simple
 WorkingDirectory=/root/ykwork/campus-service-platform
 Environment=HOME=/root
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=DEPLOY_PORT=8091
 EnvironmentFile=-/root/ykwork/campus-service-platform/.env
 ExecStart=/root/ykwork/campus-service-platform/bin/deployd
